@@ -6,7 +6,7 @@ const fs = require('fs');
 const TEST_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "DUMMY_TOKEN_FOR_TESTS";
 const TEST_CHAT_ID = Number(process.env.TELEGRAM_CHAT_ID) || -100123456789;
 
-const mainJs = fs.readFileSync('public/js/main.js', 'utf8');
+const mainJs = fs.readFileSync('public/js/main.js', 'utf8').replace(/\r\n/g, '\n');
 
 // Global mock environment
 let ca = 0;
