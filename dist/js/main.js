@@ -893,7 +893,13 @@ function spawnCombatPopup(text, type) {
   var rot = (Math.random() * 12 - 6).toFixed(1) + 'deg';
   el.style.setProperty('--rot', rot);
   if (type === 'erfan-crit') {
-    var x = window.innerWidth - 60 + (Math.random() * 20 - 10);
+    var rightEdge = window.innerWidth;
+    var canvasEl = document.querySelector('canvas');
+    if (canvasEl) {
+      var rect = canvasEl.getBoundingClientRect();
+      rightEdge = rect.right;
+    }
+    var x = rightEdge - 60 + (Math.random() * 20 - 10);
     var y = 60 + (Math.random() * 30 - 15);
     el.style.left = x + 'px';
     el.style.top = y + 'px';
