@@ -15,7 +15,7 @@ This is a fork for contribution upstream. See [Contributing](#contributing) for 
 
 ```bash
 npm install
-cp .env.example .env   # set TELEGRAM_BOT_TOKEN for live bot tests
+cp .env.example .env   # reserved for future bot/server work
 npm run dev            # vite on http://localhost:5173
 npm run build          # tsc + vite build -> dist/ (gitignored)
 npm run preview
@@ -39,9 +39,8 @@ public/                     # served as-is by Vite
   js/main.js                # 496KB legacy bundle (currently loaded by index.html)
   css/main.min.css
   images/, sounds/hit1-3.mp3, fonts/
-tests/                      # vitest ports of root .cjs anticheat checks
-test_anticheat_slice.cjs
-test_honeypot_anticheat.cjs # ad-hoc node runners (kept, use env tokens)
+tests/                      # smoke suite guarding repo invariants
+docs/anticheat-future.md      # plan for WASM-signed score requests (own PR)
 PROJECT_RULES.md            # strict sound policy - read before adding audio
 ```
 
@@ -62,9 +61,10 @@ Strict, per `PROJECT_RULES.md`:
 
 ## Tests
 
-- `tests/anticheat.test.js` (vitest) - honeypot sensors, console bait, Telegram callout `"یه متقلبه!"`, fallback `"کاربر"`.
-- Root `.cjs` scripts run the same checks ad-hoc via `node <file>`.
-- Test tokens come from env (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) with dummy fallbacks so CI runs offline.
+- `tests/smoke.test.js` (vitest) - repo invariants (scripts, ignores, legacy entry wiring).
+- No anti-cheat coverage right now: the client honeypot was removed (it can't
+  stop forged requests). See `docs/anticheat-future.md` for the planned
+  WASM-signed replacement (separate branch/PR).
 
 ## Contributing
 
