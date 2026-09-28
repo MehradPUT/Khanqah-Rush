@@ -1,0 +1,19 @@
+{
+  "name": "khanqah-rush",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@twa-dev/sdk": "^7.0.0",
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  }
+}

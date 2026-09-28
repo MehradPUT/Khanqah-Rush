@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Khanqah Rush</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="MobileOptimized" content="176" />
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="robots" content="noindex,nofollow" />
+    <!-- Telegram Mini App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@700;800;900&display=swap" rel="stylesheet">
+    <link href="css/main.min.css" rel="stylesheet">
+  </head>
+  <body>
+    <div id="page_wrap" class="page_wrap loading in_result in_greet">
+      <div id="canvas_wrap" class="canvas_wrap"></div>
+      <div id="page_content_wrap" class="page_content_wrap">
+        <div class="page_content">
+          <div id="table_content" class="table_content">
+            <div class="game_title">Khanqah Rush</div>
+            <div id="character_selector" class="char-carousel-wrap">
+              <button type="button" class="char-arrow-btn prev" id="btn_char_prev" aria-label="Previous Character" title="قهرمان قبلی">
+                <span class="char-nav-arrow">&#9664;</span>
+              </button>
+              
+              <div class="char-carousel-card" id="char_carousel_card" title="کلیک برای تغییر قهرمان" style="display:flex; justify-content:center; align-items:center;">
+                <span class="char-card-name" id="char_card_name" style="display:block; width:100%; text-align:center; direction:ltr; margin:0; padding:0; font-family:'Arial Black', Impact, sans-serif; font-size:17px; font-weight:900; color:#fff;">Nima (نیما)</span>
+              </div>
+
+              <button type="button" class="char-arrow-btn next" id="btn_char_next" aria-label="Next Character" title="قهرمان بعدی">
+                <span class="char-nav-arrow">&#9654;</span>
+              </button>
+            </div>
+            <div class="char-carousel-dots" id="char_carousel_dots"></div>
+            <div class="result_score">
+              <div>You scored</div>
+              <div id="score_value" class="score_value"></div><!--
+           --><div class="score_share_wrap">
+                <div id="score_share" class="score_share">Share</div>
+              </div>
+            </div>
+            <div id="table_wrap" class="table_wrap">
+              <ul id="table" class="table"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="g_canvas_wrap" class="canvas_wrap ground"></div>
+      <div class="page_footer_wrap">
+        <div class="page_footer">
+          <div class="buttons">
+            <div class="button_wrap button_left">
+              <div id="button_left" class="button">
+                <div class="icon"></div>
+                <div class="icon_refresh"></div>
+                <div class="icon_play"></div>
+              </div>
+            </div><!--
+         --><div class="button_wrap button_right">
+              <div id="button_right" class="button">
+                <div class="icon"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="js/main.js"></script>
+  </body>
+</html>
