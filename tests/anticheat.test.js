@@ -43,7 +43,9 @@ function loadAnticheatSlice() {
 	const start = src.indexOf(startMarker);
 	const endPos = src.indexOf(endMarker);
 	if (start === -1 || endPos === -1) {
-		throw new Error("Could not locate anti-cheat code slice in public/js/main.js");
+		throw new Error(
+			"Could not locate anti-cheat code slice in public/js/main.js",
+		);
 	}
 	const end = src.indexOf("};", endPos) + 2;
 	vm.runInThisContext(src.slice(start, end), {
