@@ -1,5 +1,10 @@
 const fs = require('fs');
 
+// Test credentials come from env; fall back to dummy fixtures so tests run offline.
+// Copy .env.example to .env and set real values for live bot testing.
+// Never commit real tokens - see .gitignore.
+const TEST_CHAT_ID = Number(process.env.TELEGRAM_CHAT_ID) || -100123456789;
+
 const elements = {};
 function createElement(tag) {
   return {
@@ -61,7 +66,7 @@ global.Telegram = {
     enableClosingConfirmation: () => {},
     initDataUnsafe: {
       user: { first_name: "نیما", username: "nimak" },
-      chat: { id: -100123456789 }
+      chat: { id: TEST_CHAT_ID }
     },
     sendData: (data) => {
       global.window.__lastSendData = data;

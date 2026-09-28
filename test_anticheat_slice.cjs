@@ -1,5 +1,11 @@
 const fs = require('fs');
 
+// Test credentials come from env; fall back to dummy fixtures so tests run offline.
+// Copy .env.example to .env and set real values for live bot testing.
+// Never commit real tokens - see .gitignore.
+const TEST_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "DUMMY_TOKEN_FOR_TESTS";
+const TEST_CHAT_ID = Number(process.env.TELEGRAM_CHAT_ID) || -100123456789;
+
 const mainJs = fs.readFileSync('public/js/main.js', 'utf8');
 
 // Global mock environment
@@ -16,14 +22,14 @@ global.window = {
     WebApp: {
       initDataUnsafe: {
         user: { first_name: "نیما", username: "nimak" },
-        chat: { id: -100123456789 }
+        chat: { id: TEST_CHAT_ID }
       },
       sendData: (data) => { lastSendData = data; }
     }
   },
   KHANQAH_CONFIG: {
-    botToken: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
-    chatId: -100123456789,
+    botToken: TEST_BOT_TOKEN,
+    chatId: TEST_CHAT_ID,
     reportUrl: "/api/testScore"
   }
 };
