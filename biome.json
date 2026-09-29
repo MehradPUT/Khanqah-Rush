@@ -9,12 +9,11 @@
 		"ignoreUnknown": false,
 		"includes": [
 			"**",
-			"!public/js/main.js",
-			"!public/css/main.min.css",
 			"!dist",
 			"!node_modules",
 			"!scratch",
-			"!coverage"
+			"!coverage",
+			"!tmp"
 		]
 	},
 	"formatter": {

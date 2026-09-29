@@ -1,30 +1,29 @@
-export * from './characterTypes.ts';
-export * from './nima.ts';
-export * from './fargol.ts';
-export * from './ali.ts';
-export * from './amirhossein.ts';
-export * from './parsa.ts';
-export * from './ahmad.ts';
-export * from './erfan.ts';
-export * from './fateme.ts';
+export * from "./ahmad.ts";
+export * from "./ali.ts";
+export * from "./amirhossein.ts";
+export * from "./characterTypes.ts";
+export * from "./erfan.ts";
+export * from "./fargol.ts";
+export * from "./fateme.ts";
+export * from "./nima.ts";
+export * from "./parsa.ts";
 
-import { nimaCharacter } from './nima.ts';
-import { fargolCharacter } from './fargol.ts';
-import { aliCharacter } from './ali.ts';
-import { amirhosseinCharacter } from './amirhossein.ts';
-import { parsaCharacter } from './parsa.ts';
-import { ahmadCharacter } from './ahmad.ts';
-import { erfanCharacter } from './erfan.ts';
-import { fatemeCharacter } from './fateme.ts';
+import { ahmadCharacter } from "./ahmad.ts";
+import { aliCharacter } from "./ali.ts";
+import { amirhosseinCharacter } from "./amirhossein.ts";
+import { erfanCharacter } from "./erfan.ts";
+import { fargolCharacter } from "./fargol.ts";
+import { fatemeCharacter } from "./fateme.ts";
+import { nimaCharacter } from "./nima.ts";
+import { parsaCharacter } from "./parsa.ts";
 
 export const allCharacters = [
-  nimaCharacter,
-  fargolCharacter,
-  aliCharacter,
-  amirhosseinCharacter,
-  parsaCharacter,
-  ahmadCharacter,
-  erfanCharacter,
-  fatemeCharacter
+	nimaCharacter,
+	fargolCharacter,
+	aliCharacter,
+	amirhosseinCharacter,
+	parsaCharacter,
+	ahmadCharacter,
+	erfanCharacter,
+	fatemeCharacter,
 ];
-

@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Applied Biome formatting and safe lint fixes repo-wide (`import type`,
+  `**` operator, removed unused `BranchSide` import and empty constructor);
+  `npm run lint` now passes on the whole repo.
 - Test bot tokens/chats now come from env (`TELEGRAM_BOT_TOKEN`,
   `TELEGRAM_CHAT_ID`) with dummy offline fallbacks instead of hardcoded values.
 
