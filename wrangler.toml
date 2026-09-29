@@ -1,8 +1,14 @@
 name = "khanqah-rush"
+main = "worker/index.js"
 compatibility_date = "2026-09-29"
 
-# Static-asset hosting for the Vite build output. No Workers code,
-# no KV, no storage — stays on the free tier.
+# Non-secret config. Secrets (TELEGRAM_BOT_TOKEN, SERVER_SECRET,
+# WEBHOOK_SECRET) go via `wrangler secret put`. No KV, no storage.
+[vars]
+GAME_SHORT_NAME = "khanqah_rush"
+
+# Static-asset hosting for the Vite build output; the Worker above handles
+# /telegram-webhook and /api/*, everything else falls through to dist/.
 [assets]
 directory = "./dist"
 not_found_handling = "single-page-application"

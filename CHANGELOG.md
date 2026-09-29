@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Production Worker entry (`worker/index.js`): webhook + score API over the
+  verification core with static-asset fallback; covered by worker tests
+  proving valid scores reach Telegram and tampered ones stay silent.
+
 - Deterministic integer-only simulation core (`wasm/sim`, splitmix64-seeded
   branches, fixed 10 ms steps, no floats): same artifact runs in the browser
   and for server replay, with native golden tests, a `replay` CLI, and WASM

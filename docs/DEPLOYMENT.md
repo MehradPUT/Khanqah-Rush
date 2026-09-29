@@ -84,12 +84,12 @@ Accept the gaming terms when prompted (required per game).
 A small server is mandatory: Telegram calls it on Play, and only it may call
 score methods with the bot token. It can live in the **same** Cloudflare
 Worker (fetch handler + static assets, still no KV — Telegram stores the
-scores). Status: **reference-implemented** in `server/` — the node adapter
-(`server/example.cjs`) runs the full loop over the framework-free
-`server/score-core.js` (launch tokens, session keys, envelope verification,
-plausibility, `setGameScore` descriptor). Remaining: production hardening
-(monitoring/review per `docs/anticheat-future.md` layer 7), a Worker entry
-adapter, and your BotFather registration + secrets below.
+scores). Status: **implemented** — `worker/index.js` (production entry: webhook +
+score API over `server/score-core.js`, static fallback via the assets
+binding) with `server/example.cjs` kept as the local-dev reference.
+Remaining: production hardening (monitoring/review per
+`docs/anticheat-future.md` layer 7), your BotFather registration + secrets
+below, and setting the webhook (Part E).
 
 | Endpoint / trigger | Action |
 |---|---|
