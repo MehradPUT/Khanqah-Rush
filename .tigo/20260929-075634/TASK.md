@@ -1,6 +1,6 @@
 # Restore curated server/bot example into the repo
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 70
 - TAGS: backend
 

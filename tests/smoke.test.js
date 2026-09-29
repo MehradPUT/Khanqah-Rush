@@ -78,4 +78,8 @@ describe("project smoke", () => {
 			true,
 		);
 	});
+
+	it("keeps the reference bot server", () => {
+		expect(fs.existsSync(path.join(root, "server/example.cjs"))).toBe(true);
+	});
 });

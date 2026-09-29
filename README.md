@@ -46,6 +46,7 @@ src/
   vite-env.d.ts
 wasm/signer/                # Rust signer stub -> public/wasm/signer.wasm
 scripts/build-wasm.mjs      # cargo build + copy (tolerant without Rust)
+server/example.cjs          # reference-only Games bot server (no deps)
 wrangler.toml               # Cloudflare Workers static hosting for dist/
 public/                     # served as-is by Vite
   images/, sounds/hit1-3.mp3, fonts/ (unused by the procedural TS game; kept for future use)

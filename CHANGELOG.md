@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reference Games bot server (`server/example.cjs`, dependency-free):
+  answers Play callbacks with the game URL and posts scores via
+  `setGameScore`; recovered from history after `scratch/` left the disk.
+
 - `.gitignore` covering dependencies, build output, `scratch/`, `tmp/`,
   editor artefacts, secrets (`.env`), and Python/test caches.
 - `README.md` with setup, project layout, sound policy, and fork workflow.
