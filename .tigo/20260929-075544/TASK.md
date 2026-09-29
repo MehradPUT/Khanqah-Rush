@@ -1,6 +1,6 @@
 # Push cleanup branch, add upstream remote, open PR
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 80
 - TAGS: git
 
