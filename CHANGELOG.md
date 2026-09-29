@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Vim-style `H`/`L` chop keys alongside arrows and `A`/`D`.
+
 - Reference Games bot server (`server/example.cjs`, dependency-free):
   answers Play callbacks with the game URL and posts scores via
   `setGameScore`; recovered from history after `scratch/` left the disk.

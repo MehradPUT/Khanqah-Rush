@@ -119,9 +119,13 @@ export class Game {
 		// Keyboard inputs
 		window.addEventListener("keydown", (e) => {
 			if (this.state === "PLAYING") {
-				if (e.code === "ArrowLeft" || e.code === "KeyA") {
+				if (e.code === "ArrowLeft" || e.code === "KeyA" || e.code === "KeyH") {
 					this.handleChop("LEFT");
-				} else if (e.code === "ArrowRight" || e.code === "KeyD") {
+				} else if (
+					e.code === "ArrowRight" ||
+					e.code === "KeyD" ||
+					e.code === "KeyL"
+				) {
 					this.handleChop("RIGHT");
 				}
 			} else if (
