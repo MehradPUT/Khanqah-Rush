@@ -59,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `.env.example` rewritten to match the server's actual env
+  (`SERVER_SECRET`, `GAME_URL`, `GAME_SHORT_NAME`, `WEBHOOK_SECRET`);
+  the honeypot-era `TELEGRAM_CHAT_ID` is gone.
+
 - UI and Persian fonts switched to Vazirmatn (with Latin fallbacks),
   replacing Cinzel/Amiri/Outfit.
 
