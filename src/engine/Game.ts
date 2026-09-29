@@ -6,6 +6,7 @@ import type {
 } from "../characters/characterTypes.ts";
 import { nimaCharacter } from "../characters/nima.ts";
 import { TmaBridge } from "../telegram/tma.ts";
+import { loadSigner } from "../wasm/signer.ts";
 import { ParticleSystem } from "./Particles.ts";
 import { Pillar } from "./Pillar.ts";
 
@@ -483,6 +484,73 @@ export class Game {
 		}
 
 		this.gameOverMenu?.classList.remove("hidden");
+
+		void this.reportScore();
+	}
+
+	/**
+	 * Best-effort signed score report. Reads launch params (`lt`, `sid`,
+	 * `sk`, optional `api`) issued by the bot server, signs the envelope in
+	 * WASM, and POSTs it. Absent params mean local-only mode (no server
+	 * configured). Silent by design — failures must never disturb the player.
+	 */
+	private async reportScore(): Promise<void> {
+		try {
+			const params = new URLSearchParams(window.location.search);
+			const launchToken = params.get("lt");
+			const sessionId = params.get("sid");
+			const sessionKeyHex = params.get("sk");
+			const apiBase = params.get("api") ?? "";
+			if (
+				!launchToken ||
+				!sessionId ||
+				!sessionKeyHex ||
+				!/^[0-9a-f]{64}$/.test(sessionKeyHex)
+			) {
+				return;
+			}
+			const signer = await loadSigner();
+			if (!signer) {
+				return;
+			}
+			const key = new Uint8Array(32);
+			for (let i = 0; i < 32; i++) {
+				key[i] = Number.parseInt(sessionKeyHex.slice(i * 2, i * 2 + 2), 16);
+			}
+			if (!signer.setSessionKey(key)) {
+				return;
+			}
+			const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
+			const nonce = Array.from(nonceBytes)
+				.map((b) => b.toString(16).padStart(2, "0"))
+				.join("");
+			const timestamp = Math.floor(Date.now() / 1000);
+			const tag = signer.signEnvelope({
+				sessionId,
+				score: this.score,
+				durationSec: this.survivalTime,
+				nonce,
+				timestamp,
+			});
+			if (!tag) {
+				return;
+			}
+			await fetch(`${apiBase}/api/setScore`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					lt: launchToken,
+					sid: sessionId,
+					score: this.score,
+					durationSec: this.survivalTime,
+					nonce,
+					timestamp,
+					tag,
+				}),
+			});
+		} catch {
+			// Best-effort and silent by design.
+		}
 	}
 
 	private updateHud() {

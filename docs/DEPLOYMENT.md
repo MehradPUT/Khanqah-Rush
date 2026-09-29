@@ -84,8 +84,12 @@ Accept the gaming terms when prompted (required per game).
 A small server is mandatory: Telegram calls it on Play, and only it may call
 score methods with the bot token. It can live in the **same** Cloudflare
 Worker (fetch handler + static assets, still no KV — Telegram stores the
-scores). Status: **not implemented yet** — tracked tasks below; implement
-against this contract:
+scores). Status: **reference-implemented** in `server/` — the node adapter
+(`server/example.cjs`) runs the full loop over the framework-free
+`server/score-core.js` (launch tokens, session keys, envelope verification,
+plausibility, `setGameScore` descriptor). Remaining: production hardening
+(monitoring/review per `docs/anticheat-future.md` layer 7), a Worker entry
+adapter, and your BotFather registration + secrets below.
 
 | Endpoint / trigger | Action |
 |---|---|
@@ -93,10 +97,10 @@ against this contract:
 | `POST /api/setScore` from the game page | Validate, then Bot API `setGameScore(chat_id, message_id, user_id, score)`. Use `force=true` only to demote cheaters. |
 | Game-over tables (optional) | Bot API `getGameHighScores` for in-game leaderboards. |
 
-- Secrets: `wrangler secret put TELEGRAM_BOT_TOKEN` (never in code/env files).
-- Tracked follow-ups: curated server example, WASM-signed client→server
-  requests, and the client Games adaptation (`games.js`,
-  `TelegramGameProxy.shareScore()`).
+- Secrets: `wrangler secret put TELEGRAM_BOT_TOKEN` (never in code/env files);
+  `SERVER_SECRET` signs launch tokens (defaults to the bot token for local dev).
+- Tracked follow-ups: production hardening, Worker entry adapter, and the
+  client Games adaptation (`games.js`, `TelegramGameProxy.shareScore()`).
 
 ## Part E — Launch and verify in Telegram
 
