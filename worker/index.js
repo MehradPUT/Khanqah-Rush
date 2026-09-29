@@ -46,14 +46,18 @@ async function telegram(env, method, params) {
 			body: JSON.stringify(params),
 		},
 	);
-	return res.json();
+	const data = await res.json().catch(() => ({}));
+	if (!data.ok) {
+		console.warn(`[worker] telegram ${method} failed`, JSON.stringify(data));
+	}
+	return data;
 }
 
 function serverSecret(env) {
 	return env.SERVER_SECRET || env.TELEGRAM_BOT_TOKEN;
 }
 
-async function handleWebhook(req, env) {
+async function handleUpdate(update, req, env) {
 	if (env.WEBHOOK_SECRET) {
 		const got = req.headers.get("x-telegram-bot-api-secret-token");
 		// Timing-safe compare without node:crypto (Workers-safe).
@@ -68,7 +72,6 @@ async function handleWebhook(req, env) {
 			return json({ ok: false }, 401);
 		}
 	}
-	const update = await req.json().catch(() => ({}));
 	if (update.inline_query) {
 		// Inline mode: answer with the game so typing @botname offers it.
 		// Requires /setinline on the bot (BotFather); without it Telegram
@@ -185,7 +188,11 @@ export default {
 			return json({ ok: true });
 		}
 		if (req.method === "POST" && url.pathname === "/telegram-webhook") {
-			return handleWebhook(req, env);
+			const update = await req.json().catch(() => ({}));
+			console.log(
+				`[worker] update: ${update.inline_query ? "inline_query" : update.callback_query ? "callback_query" : update.message ? `message:${update.message.text ?? "?"}` : "unknown"}`,
+			);
+			return handleUpdate(update, req, env);
 		}
 		if (req.method === "POST" && url.pathname === "/api/setScore") {
 			return handleSetScore(req, env);
