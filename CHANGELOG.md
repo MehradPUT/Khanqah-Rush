@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Unused runtime dependencies (`@twa-dev/sdk`, `telegraf`); nothing in
+  `src/` imported them.
+
 - Client honeypot anti-cheat harness and its tests
   (`tests/anticheat.test.js`, `test_anticheat_slice.cjs`,
   `test_honeypot_anticheat.cjs`); it could not stop forged requests.
