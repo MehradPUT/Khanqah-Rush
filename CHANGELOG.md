@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/DEPLOYMENT.md`: complete walkthrough from `npm run build` to BotFather
   Mini App registration (`/newapp` short name), Workers deploy, and the
   in-Telegram verification checklist.
+- `docs/DEPLOYMENT.md` rewritten for the Telegram Games platform (`/newgame`
+  short name as Game ID, per-launch URL via `answerCallbackQuery`,
+  `setGameScore` server contract); removed the superseded Mini-App-oriented
+  `docs/telegram-hosting.md`.
 - GitHub Actions CI (`.github/workflows/ci.yml`) running check, test, lint,
   and build on push/PR, pinned to Node 24 via `.nvmrc`.
 - Vite shell `index.html` for the TS game (all DOM hooks, `/src/main.ts`

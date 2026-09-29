@@ -4,7 +4,7 @@
 
 The client-side honeypot (`window.score` getter/setter traps, shadow-score XOR,
 `FLAGGED_<reason>` tokens, `untrusted_event` flags in `public/js/main.js`) only
-catches players poking values in the dev console. In a Telegram Mini App the
+catches players poking values in the dev console. In a Telegram Game the
 real attack is a forged HTTP request built outside the game, which never touches
 those traps — so the system added code and test surface without real protection.
 It was removed; the test harness (`tests/anticheat.test.js`,
@@ -34,7 +34,7 @@ score-submit path (`qb()`) had no Node-verifiable cover (canvas `getContext`).
    (Rust stub + TS loader, `npm run wasm:build`), `index.html` entry migration
    (`public/js/main.js` → `/src/main.ts`, `<canvas id="gameCanvas">` wiring),
    and Cloudflare Workers static hosting for `dist/`. Done — remaining prep
-   is the BotFather/Mini App wiring in `docs/telegram-hosting.md`.
+   is the BotFather/Game wiring in `docs/DEPLOYMENT.md`.
 2. **Branch `feat/signed-score-anticheat`** (own PR, next): replace the stub
    with real HMAC-SHA256 signing (build-time secret) + server verification +
    new tests. Do not reintroduce getter/setter honeypots.
