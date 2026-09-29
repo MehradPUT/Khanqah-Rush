@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- UI and Persian fonts switched to Vazirmatn (with Latin fallbacks),
+  replacing Cinzel/Amiri/Outfit.
+
 - Applied Biome formatting and safe lint fixes repo-wide (`import type`,
   `**` operator, removed unused `BranchSide` import and empty constructor);
   `npm run lint` now passes on the whole repo.
