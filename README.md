@@ -31,6 +31,9 @@ Rust prerequisite for the signer (one time):
 `rustup target add wasm32-unknown-unknown`. Without it, `wasm:build`
 warns and skips — the game runs without the stub.
 
+Shortcuts for all of the above (plus deploy, webhook, and tasks):
+see `make help`.
+
 ## Layout
 
 ```
