@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Bot discovery: inline-query answers (needs BotFather `/setinline`) and a
+  `/start` reply with a Play button.
+
+- `Makefile` shortcuts (`make help`): verify/test/lint/build, WASM setup,
+  Cloudflare deploy and account commands, bot/webhook inspection and
+  registration (secrets stay in `.env`, never printed), Tigo tasks.
+
+- Production Worker entry (`worker/index.js`): webhook + score API over the
+  verification core with static-asset fallback; covered by worker tests
+  proving valid scores reach Telegram and tampered ones stay silent.
+
 - Deterministic integer-only simulation core (`wasm/sim`, splitmix64-seeded
   branches, fixed 10 ms steps, no floats): same artifact runs in the browser
   and for server replay, with native golden tests, a `replay` CLI, and WASM
@@ -58,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry, `game.css` import); `npm run build` emits a 25KB bundle.
 
 ### Changed
+
+- `.env.example` rewritten to match the server's actual env
+  (`SERVER_SECRET`, `GAME_URL`, `GAME_SHORT_NAME`, `WEBHOOK_SECRET`);
+  the honeypot-era `TELEGRAM_CHAT_ID` is gone.
 
 - UI and Persian fonts switched to Vazirmatn (with Latin fallbacks),
   replacing Cinzel/Amiri/Outfit.

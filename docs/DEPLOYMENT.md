@@ -78,18 +78,21 @@ Accept the gaming terms when prompted (required per game).
 3. Manage later with `/mybots` → your bot → (game settings). Keep the photo
    and description fresh; `telegram_game_banner.png` in the repo root is a
    candidate source asset.
+4. **Enable inline mode**: `/setinline` → select your bot → send a placeholder
+   query text. Without this, typing `@botname` in any chat spins forever —
+   Telegram never sends `inline_query` updates and the server cannot answer.
 
 ## Part D — Run the bot server (launch URL + scores)
 
 A small server is mandatory: Telegram calls it on Play, and only it may call
 score methods with the bot token. It can live in the **same** Cloudflare
 Worker (fetch handler + static assets, still no KV — Telegram stores the
-scores). Status: **reference-implemented** in `server/` — the node adapter
-(`server/example.cjs`) runs the full loop over the framework-free
-`server/score-core.js` (launch tokens, session keys, envelope verification,
-plausibility, `setGameScore` descriptor). Remaining: production hardening
-(monitoring/review per `docs/anticheat-future.md` layer 7), a Worker entry
-adapter, and your BotFather registration + secrets below.
+scores). Status: **implemented** — `worker/index.js` (production entry: webhook +
+score API over `server/score-core.js`, static fallback via the assets
+binding) with `server/example.cjs` kept as the local-dev reference.
+Remaining: production hardening (monitoring/review per
+`docs/anticheat-future.md` layer 7), your BotFather registration + secrets
+below, and setting the webhook (Part E).
 
 | Endpoint / trigger | Action |
 |---|---|
@@ -105,9 +108,11 @@ adapter, and your BotFather registration + secrets below.
 ## Part E — Launch and verify in Telegram
 
 1. From your bot, `sendGame(game_short_name)` to a test chat (or via inline
-   mode). The message shows a Play button.
-2. Press Play on a real device (Android/iOS app; desktop works too but test
-   mobile): the game must open at your Part B URL.
+   mode). The message shows a Play button. `/start` also works — the bot
+   replies with a Play button.
+2. Press Play, or type `@botname` in any chat and pick the game from the
+   inline results, on a real device (Android/iOS app; desktop works too but
+   test mobile): the game must open at your Part B URL.
 3. Playtest checklist:
    - Start menu shows over the canvas; `Start Chopping` hides it.
    - Left/right chops respond to touch zones and `A`/`D` on desktop.
