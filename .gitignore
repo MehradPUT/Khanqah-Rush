@@ -8,6 +8,10 @@ dist/
 dist-ssr/
 *.local
 
+# Built WASM artifacts (rebuilt via npm run wasm:build)
+public/wasm/
+wasm/signer/target/
+
 # Local one-off tooling / generated assets (kept on disk, not in repo)
 scratch/
 
@@ -63,3 +67,6 @@ coverage/
 
 # Local scratch space (see AGENTS.md)
 tmp/
+
+# Wrangler local state
+.wrangler/

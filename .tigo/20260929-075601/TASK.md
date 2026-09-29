@@ -1,6 +1,6 @@
 # Set up WASM build pipeline and Telegram hosting prep
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 85
 - TAGS: wasm, telegram
 

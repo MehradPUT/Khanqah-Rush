@@ -1,0 +1,8 @@
+name = "khanqah-rush"
+compatibility_date = "2026-09-29"
+
+# Static-asset hosting for the Vite build output. No Workers code,
+# no KV, no storage — stays on the free tier.
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"

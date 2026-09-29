@@ -19,6 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.env.example` with dummy Telegram/bot placeholders.
 - `docs/anticheat-future.md` with the planned WASM-signed score design.
 - `npm run check` (`tsc --noEmit`) typecheck script.
+- Rust WASM signer stub (`wasm/signer`, 473-byte `signer.wasm`): TS loader
+  with graceful degradation, `npm run wasm:build` (tolerant without Rust),
+  `prebuild` hook, and loader tests.
+- Cloudflare Workers static hosting for `dist/` (`wrangler.toml`,
+  `npm run deploy`, `docs/telegram-hosting.md`); no KV/storage, free tier.
+- `.gitattributes` enforcing LF line endings so Biome stays green on checkout.
+- `docs/DEPLOYMENT.md`: complete walkthrough from `npm run build` to BotFather
+  Mini App registration (`/newapp` short name), Workers deploy, and the
+  in-Telegram verification checklist.
+- `docs/DEPLOYMENT.md` rewritten for the Telegram Games platform (`/newgame`
+  short name as Game ID, per-launch URL via `answerCallbackQuery`,
+  `setGameScore` server contract); removed the superseded Mini-App-oriented
+  `docs/telegram-hosting.md`.
+- `docs/anticheat-future.md` rewritten as a layered defense design (platform
+  guarantees, webhook auth, launch-bound sessions, per-session signing keys,
+  signed envelopes, plausibility checks, silent enforcement, monitoring)
+  from current anti-cheat research.
 - GitHub Actions CI (`.github/workflows/ci.yml`) running check, test, lint,
   and build on push/PR, pinned to Node 24 via `.nvmrc`.
 - Vite shell `index.html` for the TS game (all DOM hooks, `/src/main.ts`
