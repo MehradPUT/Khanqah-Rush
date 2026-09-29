@@ -91,19 +91,25 @@ function nowSec() {
 
 /**
  * Issue a launch token for a game start. Embed in the answered game URL;
- * the client echoes it back with every score post.
+ * the client echoes it back with every score post. Regular launches carry
+ * user/chat/message ids; inline launches carry the inline message id
+ * instead (there is no chat message to bind to).
  */
 export async function issueLaunchToken(
-	{ userId, chatId, messageId, ttlSec = 3600 },
+	{ userId, chatId, messageId, inlineMessageId, ttlSec = 3600 },
 	serverSecret,
 	atSec = nowSec(),
 ) {
 	const payload = {
 		u: userId,
-		c: chatId,
-		m: messageId,
 		exp: atSec + ttlSec,
 	};
+	if (typeof inlineMessageId === "string") {
+		payload.i = inlineMessageId;
+	} else {
+		payload.c = chatId;
+		payload.m = messageId;
+	}
 	const body = b64urlEncode(toBytes(JSON.stringify(payload)));
 	const sig = await hmacSha256(toBytes(serverSecret), toBytes(body));
 	return `${body}.${b64urlEncode(sig)}`;
@@ -140,8 +146,10 @@ export async function verifyLaunchToken(token, serverSecret, atSec = nowSec()) {
 		typeof payload.exp !== "number" ||
 		payload.exp < atSec ||
 		!Number.isInteger(payload.u) ||
-		!Number.isInteger(payload.c) ||
-		!Number.isInteger(payload.m)
+		!(
+			typeof payload.i === "string" ||
+			(Number.isInteger(payload.c) && Number.isInteger(payload.m))
+		)
 	) {
 		return null;
 	}
@@ -264,7 +272,19 @@ export function checkPlausibility({ score, durationSec, chops }) {
 }
 
 /** Transport-agnostic Bot API call descriptor for setGameScore. */
-export function buildSetGameScoreCall({ userId, chatId, messageId, score }) {
+export function buildSetGameScoreCall({
+	userId,
+	chatId,
+	messageId,
+	inlineMessageId,
+	score,
+}) {
+	if (typeof inlineMessageId === "string") {
+		return {
+			method: "setGameScore",
+			params: { user_id: userId, inline_message_id: inlineMessageId, score },
+		};
+	}
 	return {
 		method: "setGameScore",
 		params: { user_id: userId, chat_id: chatId, message_id: messageId, score },

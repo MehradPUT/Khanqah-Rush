@@ -191,4 +191,78 @@ describe("worker entry", () => {
 			vi.unstubAllGlobals();
 		}
 	});
+
+	it("mints sessions for inline launches and writes via inline_message_id", async () => {
+		const telegramMock = vi.fn(
+			async () => new Response(JSON.stringify({ ok: true })),
+		);
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			const res = await worker.fetch(
+				post(
+					"/telegram-webhook",
+					{
+						callback_query: {
+							id: "q9",
+							game_short_name: "khanqah_rush",
+							from: { id: 7 },
+							inline_message_id: "AAQAAxkBAAI",
+						},
+					},
+					{ "X-Telegram-Bot-Api-Secret-Token": "wh-secret" },
+				),
+				{ ...ENV },
+			);
+			expect(res.status).toBe(200);
+			const answer = telegramMock.mock.calls.find(([url]) =>
+				url.endsWith("/answerCallbackQuery"),
+			);
+			const params = JSON.parse(answer[1].body);
+			const url = new URL(params.url);
+			const lt = url.searchParams.get("lt");
+			const sid = url.searchParams.get("sid");
+			const sk = url.searchParams.get("sk");
+			expect(lt && sid && sk).toBeTruthy();
+
+			const key = await deriveSessionKey("test-secret", sid);
+			const { randomBytes } = await import("node:crypto");
+			const nonce = randomBytes(16).toString("hex");
+			const timestamp = Math.floor(Date.now() / 1000);
+			const canonical = [
+				"khanqah-v1",
+				sid,
+				"60",
+				"20",
+				nonce,
+				String(timestamp),
+			].join("\n");
+			const tag = createHmac("sha256", Buffer.from(key))
+				.update(canonical)
+				.digest("hex");
+			const posted = await worker.fetch(
+				post("/api/setScore", {
+					lt,
+					sid,
+					score: 60,
+					durationSec: 20,
+					nonce,
+					timestamp,
+					tag,
+				}),
+				{ ...ENV },
+			);
+			expect(posted.status).toBe(200);
+			const scoreCalls = telegramMock.mock.calls.filter(([url]) =>
+				url.endsWith("/setGameScore"),
+			);
+			expect(scoreCalls.length).toBe(1);
+			expect(JSON.parse(scoreCalls[0][1].body)).toMatchObject({
+				user_id: 7,
+				inline_message_id: "AAQAAxkBAAI",
+				score: 60,
+			});
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 });

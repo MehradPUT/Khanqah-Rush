@@ -110,16 +110,17 @@ async function handleWebhook(req, env) {
 		const userId = query.from?.id;
 		const chatId = query.message?.chat?.id;
 		const messageId = query.message?.message_id;
-		if (
+		const inlineMessageId = query.inline_message_id;
+		const launchIds =
 			Number.isInteger(userId) &&
-			Number.isInteger(chatId) &&
-			Number.isInteger(messageId)
-		) {
+			(Number.isInteger(chatId) && Number.isInteger(messageId)
+				? { userId, chatId, messageId }
+				: typeof inlineMessageId === "string"
+					? { userId, inlineMessageId }
+					: null);
+		if (launchIds) {
 			const sessionId = randomSessionId();
-			const lt = await issueLaunchToken(
-				{ userId, chatId, messageId },
-				serverSecret(env),
-			);
+			const lt = await issueLaunchToken(launchIds, serverSecret(env));
 			const sk = toHex(await deriveSessionKey(serverSecret(env), sessionId));
 			const sep = gameUrl.includes("?") ? "&" : "?";
 			url =
@@ -169,6 +170,7 @@ async function handleSetScore(req, env) {
 			userId: launch.u,
 			chatId: launch.c,
 			messageId: launch.m,
+			inlineMessageId: launch.i,
 			score: body.score,
 		});
 		await telegram(env, call.method, call.params);
