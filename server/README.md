@@ -1,10 +1,13 @@
 # server/
 
-Reference-only bot server for the Telegram Games platform.
+Bot server for the Telegram Games platform.
 
-- [`example.cjs`](example.cjs) — dependency-free Node server sketch:
-  answers Play callbacks with the game URL and posts scores via
-  `setGameScore`. Run with env vars (see header).
+- [`score-core.js`](score-core.js) — framework-free verification core
+  (WebCrypto, no deps; runs on Node and Workers): launch tokens, session
+  keys, envelope verification, plausibility checks, `setGameScore`
+  descriptor. Unit-tested in `tests/score-core.test.js`.
+- [`example.cjs`](example.cjs) — thin `node:http` adapter over the core
+  (webhook + answer-with-session flow + `/api/setScore`). Run with env vars
+  (see header). The future Worker entry reuses the same core.
 - Full setup: [`docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md) Part D.
-- Real implementation (launch tokens, HMAC envelope, plausibility checks)
-  is tracked future work — see `docs/anticheat-future.md`.
+- Layered design: [`docs/anticheat-future.md`](../docs/anticheat-future.md).

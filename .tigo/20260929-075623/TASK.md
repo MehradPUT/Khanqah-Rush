@@ -1,6 +1,6 @@
 # Implement WASM-signed score requests with server verification
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 85
 - TAGS: security, backend
 

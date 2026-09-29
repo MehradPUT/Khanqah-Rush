@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Signed score pipeline: real HMAC-SHA256 signer in WASM (per-session keys,
+  wire v2, RFC-vector cargo tests), framework-free `server/score-core.js`
+  (launch tokens, session keys, envelope + plausibility verification),
+  game-over reporting from `Game.ts`, and a working node adapter
+  (`server/example.cjs`) covering webhook answers and `/api/setScore`.
 - Vim-style `H`/`L` chop keys alongside arrows and `A`/`D`.
 
 - Reference Games bot server (`server/example.cjs`, dependency-free):
