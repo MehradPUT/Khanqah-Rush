@@ -70,6 +70,8 @@ Strict, per `PROJECT_RULES.md`:
 1. Add upstream once: `git remote add upstream <friend-original-url>`
 2. Branch from `main`: `git checkout -b feat/...`
 3. Run `npm test`, `npm run lint`, `npx tsc --noEmit` before pushing.
+   (CI in `.github/workflows/ci.yml` runs check, test, lint, and build
+   on every push and PR.)
 4. Install pre-commit: `pip install pre-commit && pre-commit install`
 5. Open PR against upstream `main`, describe testing.
 

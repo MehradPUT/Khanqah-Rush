@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.env.example` with dummy Telegram/bot placeholders.
 - `docs/anticheat-future.md` with the planned WASM-signed score design.
 - `npm run check` (`tsc --noEmit`) typecheck script.
+- GitHub Actions CI (`.github/workflows/ci.yml`) running check, test, lint,
+  and build on push/PR, pinned to Node 24 via `.nvmrc`.
 - Vite shell `index.html` for the TS game (all DOM hooks, `/src/main.ts`
   entry, `game.css` import); `npm run build` emits a 25KB bundle.
 

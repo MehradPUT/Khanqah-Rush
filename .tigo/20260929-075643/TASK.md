@@ -1,6 +1,6 @@
 # Add CI workflow (install, build, test, lint)
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 75
 - TAGS: ci
 
