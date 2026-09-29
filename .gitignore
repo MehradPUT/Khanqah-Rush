@@ -10,7 +10,7 @@ dist-ssr/
 
 # Built WASM artifacts (rebuilt via npm run wasm:build)
 public/wasm/
-wasm/signer/target/
+wasm/*/target/
 
 # Local one-off tooling / generated assets (kept on disk, not in repo)
 scratch/
