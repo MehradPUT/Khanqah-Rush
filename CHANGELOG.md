@@ -60,6 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Licensing plans: the project stays unlicensed for now; all references
+  and the pending license task are dropped.
 - Unused runtime dependencies (`@twa-dev/sdk`, `telegraf`); nothing in
   `src/` imported them.
 

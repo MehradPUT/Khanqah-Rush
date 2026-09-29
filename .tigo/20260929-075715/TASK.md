@@ -1,6 +1,6 @@
 # Choose a LICENSE with upstream
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 70
 - TAGS: legal
 

@@ -94,5 +94,3 @@ Strict, per `PROJECT_RULES.md`:
    on every push and PR.)
 4. Install pre-commit: `pip install pre-commit && pre-commit install`
 5. Open PR against upstream `main`, describe testing.
-
-No `LICENSE` file yet - confirm with upstream before publishing.
