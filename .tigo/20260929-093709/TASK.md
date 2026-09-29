@@ -1,6 +1,6 @@
 # Adopt Vazirmatn as the UI and Persian font
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 65
 - TAGS: ui, frontend
 

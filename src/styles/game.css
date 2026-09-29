@@ -12,9 +12,9 @@
 	--text-muted: #94a3b8;
 	--border-ornate: rgba(245, 176, 65, 0.35);
 	--border-active: #f5b041;
-	--font-display: "Cinzel", serif;
-	--font-persian: "Amiri", serif;
-	--font-ui: "Outfit", sans-serif;
+	--font-display: "Vazirmatn", "Outfit", sans-serif;
+	--font-persian: "Vazirmatn", serif;
+	--font-ui: "Vazirmatn", system-ui, sans-serif;
 	--safe-top: env(safe-area-inset-top, 0px);
 	--safe-bottom: env(safe-area-inset-bottom, 0px);
 }

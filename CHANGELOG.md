@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Vim-style `H`/`L` chop keys alongside arrows and `A`/`D`.
+
+- Reference Games bot server (`server/example.cjs`, dependency-free):
+  answers Play callbacks with the game URL and posts scores via
+  `setGameScore`; recovered from history after `scratch/` left the disk.
+
 - `.gitignore` covering dependencies, build output, `scratch/`, `tmp/`,
   editor artefacts, secrets (`.env`), and Python/test caches.
 - `README.md` with setup, project layout, sound policy, and fork workflow.
@@ -43,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- UI and Persian fonts switched to Vazirmatn (with Latin fallbacks),
+  replacing Cinzel/Amiri/Outfit.
+
 - Applied Biome formatting and safe lint fixes repo-wide (`import type`,
   `**` operator, removed unused `BranchSide` import and empty constructor);
   `npm run lint` now passes on the whole repo.
@@ -50,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `TELEGRAM_CHAT_ID`) with dummy offline fallbacks instead of hardcoded values.
 
 ### Removed
+
+- Licensing plans: the project stays unlicensed for now; all references
+  and the pending license task are dropped.
+- Unused runtime dependencies (`@twa-dev/sdk`, `telegraf`); nothing in
+  `src/` imported them.
 
 - Client honeypot anti-cheat harness and its tests
   (`tests/anticheat.test.js`, `test_anticheat_slice.cjs`,

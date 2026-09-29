@@ -1,6 +1,6 @@
 # Remove unused runtime dependencies
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 55
 - TAGS: dx
 
