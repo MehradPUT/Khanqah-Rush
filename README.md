@@ -22,7 +22,13 @@ npm run preview
 npm test               # vitest run
 npm run lint           # biome check
 npm run format         # biome format --write
+npm run wasm:build     # rebuild the Rust signer stub (needs the wasm32 target)
+npm run deploy         # build + deploy dist/ to Cloudflare Workers
 ```
+
+Rust prerequisite for the signer (one time):
+`rustup target add wasm32-unknown-unknown`. Without it, `wasm:build`
+warns and skips — the game runs without the stub.
 
 ## Layout
 
@@ -35,10 +41,17 @@ src/
   telegram/tma.ts           # TmaBridge
   audio/                    # SoundEngine, VoiceEngine (see PROJECT_RULES.md)
   styles/game.css
+  wasm/signer.ts            # loader for the Rust signer stub (optional)
+  vite-env.d.ts
+wasm/signer/                # Rust signer stub -> public/wasm/signer.wasm
+scripts/build-wasm.mjs      # cargo build + copy (tolerant without Rust)
+wrangler.toml               # Cloudflare Workers static hosting for dist/
 public/                     # served as-is by Vite
   images/, sounds/hit1-3.mp3, fonts/ (unused by the procedural TS game; kept for future use)
-tests/                      # smoke suite guarding repo invariants
-docs/anticheat-future.md      # plan for WASM-signed score requests (own PR)
+tests/                      # smoke + wasm-loader suites
+docs/
+  anticheat-future.md       # plan for WASM-signed score requests (own PR)
+  telegram-hosting.md       # Workers deploy + BotFather wiring
 PROJECT_RULES.md            # strict sound policy - read before adding audio
 ```
 
@@ -60,7 +73,9 @@ Strict, per `PROJECT_RULES.md`:
 
 ## Tests
 
-- `tests/smoke.test.js` (vitest) - repo invariants (scripts, ignores, legacy entry wiring).
+- `tests/smoke.test.js` (vitest) - repo invariants (scripts, entry wiring, docs).
+- `tests/wasm-signer.test.js` (vitest) - signer loader graceful degradation
+  plus a real-stub round trip when `public/wasm/signer.wasm` is built.
 - No anti-cheat coverage right now: the client honeypot was removed (it can't
   stop forged requests). See `docs/anticheat-future.md` for the planned
   WASM-signed replacement (separate branch/PR).

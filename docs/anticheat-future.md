@@ -30,11 +30,14 @@ score-submit path (`qb()`) had no Node-verifiable cover (canvas `getContext`).
 
 ## Branch / PR plan (separate from this removal)
 
-1. **Branch `chore/wasm-telegram-prep`** (own PR): WASM build pipeline and
-   `dist/` output for Telegram hosting. The `index.html` entry migration
-   (`public/js/main.js` → `/src/main.ts`, `<canvas id="gameCanvas">` wiring)
-   is already done (`feat/vite-entry-migration`).
-   Status: WASM/hosting prep not started — extent of existing prep is unknown.
+1. **Branch `chore/wasm-telegram-prep`** (own PR): WASM toolchain scaffold
+   (Rust stub + TS loader, `npm run wasm:build`), `index.html` entry migration
+   (`public/js/main.js` → `/src/main.ts`, `<canvas id="gameCanvas">` wiring),
+   and Cloudflare Workers static hosting for `dist/`. Done — remaining prep
+   is the BotFather/Mini App wiring in `docs/telegram-hosting.md`.
+2. **Branch `feat/signed-score-anticheat`** (own PR, next): replace the stub
+   with real HMAC-SHA256 signing (build-time secret) + server verification +
+   new tests. Do not reintroduce getter/setter honeypots.
 2. **Branch `feat/signed-score-anticheat`** (own PR, on top of the above):
    implement WASM signing + server verification + new tests. Do not reintroduce
    getter/setter honeypots.
