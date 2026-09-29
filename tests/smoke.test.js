@@ -31,9 +31,46 @@ describe("project smoke", () => {
 		}
 	});
 
-	it("keeps the frozen legacy entry wiring", () => {
-		expect(read("index.html")).toContain("js/main.js");
-		expect(fs.existsSync(path.join(root, "public/js/main.js"))).toBe(true);
+	it("wires the Vite entry and required DOM hooks", () => {
+		const html = read("index.html").replace(/\r\n/g, "\n");
+		expect(html).toContain("/src/main.ts");
+		expect(html).not.toContain("js/main.js");
+		for (const id of [
+			"gameCanvas",
+			"hud",
+			"scoreDisplay",
+			"bestScoreDisplay",
+			"staminaFill",
+			"abilityIndicator",
+			"phaseAvatar",
+			"phaseTag",
+			"gaugeTitle",
+			"gaugeTime",
+			"gaugeFill",
+			"vfxOverlay",
+			"startMenu",
+			"gameOverMenu",
+			"btnChopLeft",
+			"btnChopRight",
+			"btnStartGame",
+			"btnPlayAgain",
+			"btnShareTelegram",
+			"btnToggleSound",
+			"btnToggleVoice",
+			"soundIcon",
+			"soundStatus",
+			"voiceIcon",
+			"voiceStatus",
+			"finalScore",
+			"finalSurvivalTime",
+			"finalRejuvenationCount",
+			"bestScoreFinal",
+			"defeatSpeech",
+			"voiceSubtitle",
+			"speechText",
+		]) {
+			expect(html, id).toContain(`id="${id}"`);
+		}
 	});
 
 	it("keeps the anti-cheat follow-up note", () => {

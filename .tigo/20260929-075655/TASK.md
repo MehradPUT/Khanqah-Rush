@@ -1,6 +1,6 @@
 # Fix remaining whole-repo Biome diffs
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 60
 - TAGS: dx, lint
 

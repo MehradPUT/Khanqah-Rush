@@ -1,6 +1,6 @@
 # Migrate index.html entry to Vite src/main.ts
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 90
 - TAGS: migration, frontend
 

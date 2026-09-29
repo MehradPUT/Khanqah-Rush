@@ -19,9 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.env.example` with dummy Telegram/bot placeholders.
 - `docs/anticheat-future.md` with the planned WASM-signed score design.
 - `npm run check` (`tsc --noEmit`) typecheck script.
+- GitHub Actions CI (`.github/workflows/ci.yml`) running check, test, lint,
+  and build on push/PR, pinned to Node 24 via `.nvmrc`.
+- Vite shell `index.html` for the TS game (all DOM hooks, `/src/main.ts`
+  entry, `game.css` import); `npm run build` emits a 25KB bundle.
 
 ### Changed
 
+- Applied Biome formatting and safe lint fixes repo-wide (`import type`,
+  `**` operator, removed unused `BranchSide` import and empty constructor);
+  `npm run lint` now passes on the whole repo.
 - Test bot tokens/chats now come from env (`TELEGRAM_BOT_TOKEN`,
   `TELEGRAM_CHAT_ID`) with dummy offline fallbacks instead of hardcoded values.
 
@@ -30,8 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Client honeypot anti-cheat harness and its tests
   (`tests/anticheat.test.js`, `test_anticheat_slice.cjs`,
   `test_honeypot_anticheat.cjs`); it could not stop forged requests.
-  The frozen legacy bundle still contains the old code paths until the
-  Vite/WASM migration replaces it.
+- Legacy web bundle (`public/js/main.js`, `public/css/main.min.css`) and the
+  legacy shell UI (character carousel, leaderboard table), superseded by the
+  Vite TS entry. Carousel/leaderboard have no TS counterpart yet.
 
 ### Security
 
