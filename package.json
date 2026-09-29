@@ -10,7 +10,9 @@
 		"test": "vitest run",
 		"check": "tsc --noEmit",
 		"lint": "biome check .",
-		"format": "biome check --write ."
+		"format": "biome check --write .",
+		"wasm:build": "node scripts/build-wasm.mjs",
+		"prebuild": "npm run wasm:build"
 	},
 	"dependencies": {
 		"@twa-dev/sdk": "^7.0.0",
