@@ -78,6 +78,9 @@ Accept the gaming terms when prompted (required per game).
 3. Manage later with `/mybots` → your bot → (game settings). Keep the photo
    and description fresh; `telegram_game_banner.png` in the repo root is a
    candidate source asset.
+4. **Enable inline mode**: `/setinline` → select your bot → send a placeholder
+   query text. Without this, typing `@botname` in any chat spins forever —
+   Telegram never sends `inline_query` updates and the server cannot answer.
 
 ## Part D — Run the bot server (launch URL + scores)
 
@@ -105,9 +108,11 @@ below, and setting the webhook (Part E).
 ## Part E — Launch and verify in Telegram
 
 1. From your bot, `sendGame(game_short_name)` to a test chat (or via inline
-   mode). The message shows a Play button.
-2. Press Play on a real device (Android/iOS app; desktop works too but test
-   mobile): the game must open at your Part B URL.
+   mode). The message shows a Play button. `/start` also works — the bot
+   replies with a Play button.
+2. Press Play, or type `@botname` in any chat and pick the game from the
+   inline results, on a real device (Android/iOS app; desktop works too but
+   test mobile): the game must open at your Part B URL.
 3. Playtest checklist:
    - Start menu shows over the canvas; `Start Chopping` hides it.
    - Left/right chops respond to touch zones and `A`/`D` on desktop.

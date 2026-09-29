@@ -69,6 +69,39 @@ async function handleWebhook(req, env) {
 		}
 	}
 	const update = await req.json().catch(() => ({}));
+	if (update.inline_query) {
+		// Inline mode: answer with the game so typing @botname offers it.
+		// Requires /setinline on the bot (BotFather); without it Telegram
+		// never sends these updates and the inline list spins forever.
+		if (env.TELEGRAM_BOT_TOKEN) {
+			await telegram(env, "answerInlineQuery", {
+				inline_query_id: update.inline_query.id,
+				results: [
+					{
+						type: "game",
+						id: update.inline_query.id,
+						game_short_name: env.GAME_SHORT_NAME,
+					},
+				],
+			});
+		}
+		return json({ ok: true });
+	}
+	if (
+		typeof update.message?.text === "string" &&
+		update.message.text.startsWith("/start")
+	) {
+		if (env.TELEGRAM_BOT_TOKEN) {
+			await telegram(env, "sendMessage", {
+				chat_id: update.message.chat.id,
+				text: "🪓 Khanqah Rush — chop wood, dodge branches, don't get tired. Press Play!",
+				reply_markup: {
+					inline_keyboard: [[{ text: "🎮 Play", callback_game: {} }]],
+				},
+			});
+		}
+		return json({ ok: true });
+	}
 	const query = update.callback_query;
 	if (query?.game_short_name === env.GAME_SHORT_NAME) {
 		const origin = new URL(req.url).origin;

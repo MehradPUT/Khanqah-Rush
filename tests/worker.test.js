@@ -50,6 +50,64 @@ async function launchViaWebhook(telegramMock) {
 }
 
 describe("worker entry", () => {
+	it("answers inline queries with the game", async () => {
+		const telegramMock = vi.fn(
+			async () => new Response(JSON.stringify({ ok: true })),
+		);
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			const res = await worker.fetch(
+				post(
+					"/telegram-webhook",
+					{ inline_query: { id: "iq1", query: "kha" } },
+					{},
+				),
+				{ ...ENV, WEBHOOK_SECRET: "" },
+			);
+			expect(res.status).toBe(200);
+			const answer = telegramMock.mock.calls.find(([url]) =>
+				url.endsWith("/answerInlineQuery"),
+			);
+			expect(answer).toBeTruthy();
+			const params = JSON.parse(answer[1].body);
+			expect(params.inline_query_id).toBe("iq1");
+			expect(params.results).toEqual([
+				{ type: "game", id: "iq1", game_short_name: "khanqah_rush" },
+			]);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("replies to /start with a Play button", async () => {
+		const telegramMock = vi.fn(
+			async () => new Response(JSON.stringify({ ok: true })),
+		);
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			const res = await worker.fetch(
+				post(
+					"/telegram-webhook",
+					{ message: { chat: { id: 8 }, text: "/start" } },
+					{},
+				),
+				{ ...ENV, WEBHOOK_SECRET: "" },
+			);
+			expect(res.status).toBe(200);
+			const sent = telegramMock.mock.calls.find(([url]) =>
+				url.endsWith("/sendMessage"),
+			);
+			expect(sent).toBeTruthy();
+			const params = JSON.parse(sent[1].body);
+			expect(params.chat_id).toBe(8);
+			expect(params.reply_markup.inline_keyboard[0][0].callback_game).toEqual(
+				{},
+			);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("serves health and falls through to assets", async () => {
 		const health = await worker.fetch(
 			new Request("https://game.test/healthz"),

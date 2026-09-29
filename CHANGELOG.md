@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Bot discovery: inline-query answers (needs BotFather `/setinline`) and a
+  `/start` reply with a Play button.
+
 - `Makefile` shortcuts (`make help`): verify/test/lint/build, WASM setup,
   Cloudflare deploy and account commands, bot/webhook inspection and
   registration (secrets stay in `.env`, never printed), Tigo tasks.
