@@ -67,3 +67,6 @@ coverage/
 
 # Local scratch space (see AGENTS.md)
 tmp/
+
+# Wrangler local state
+.wrangler/

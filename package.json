@@ -12,7 +12,8 @@
 		"lint": "biome check .",
 		"format": "biome check --write .",
 		"wasm:build": "node scripts/build-wasm.mjs",
-		"prebuild": "npm run wasm:build"
+		"prebuild": "npm run wasm:build",
+		"deploy": "npm run build && wrangler deploy"
 	},
 	"dependencies": {
 		"@twa-dev/sdk": "^7.0.0",
@@ -22,6 +23,7 @@
 		"@biomejs/biome": "^2.5.14",
 		"typescript": "^5.4.5",
 		"vite": "^5.2.11",
-		"vitest": "^2.1.9"
+		"vitest": "^2.1.9",
+		"wrangler": "^4.143.0"
 	}
 }
