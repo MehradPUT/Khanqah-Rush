@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.env.example` with dummy Telegram/bot placeholders.
 - `docs/anticheat-future.md` with the planned WASM-signed score design.
 - `npm run check` (`tsc --noEmit`) typecheck script.
+- Vite shell `index.html` for the TS game (all DOM hooks, `/src/main.ts`
+  entry, `game.css` import); `npm run build` emits a 25KB bundle.
 
 ### Changed
 
@@ -30,8 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Client honeypot anti-cheat harness and its tests
   (`tests/anticheat.test.js`, `test_anticheat_slice.cjs`,
   `test_honeypot_anticheat.cjs`); it could not stop forged requests.
-  The frozen legacy bundle still contains the old code paths until the
-  Vite/WASM migration replaces it.
+- Legacy web bundle (`public/js/main.js`, `public/css/main.min.css`) and the
+  legacy shell UI (character carousel, leaderboard table), superseded by the
+  Vite TS entry. Carousel/leaderboard have no TS counterpart yet.
 
 ### Security
 
