@@ -10,11 +10,11 @@ those traps — so the system added code and test surface without real protectio
 It was removed; the test harness (`tests/anticheat.test.js`,
 `test_anticheat_slice.cjs`, `test_honeypot_anticheat.cjs`) went with it.
 
-Note: the frozen legacy bundle `public/js/main.js` still contains the old
-honeypot code paths. It is intentionally untouched until the Vite/WASM
-migration replaces it (see below) — hand-editing the 496 KB minified bundle
-risks breaking the only score-submit path (`qb()`) with no way to verify in
-Node (canvas `getContext`).
+Note: the legacy bundle `public/js/main.js` (which still contained the old
+honeypot code paths) was deleted together with the Vite entry migration
+(`feat/vite-entry-migration`) instead of being hand-edited — the 496 KB
+minified bundle could not be safely stripped by hand, and its only
+score-submit path (`qb()`) had no Node-verifiable cover (canvas `getContext`).
 
 ## Intended replacement: signed score requests
 
@@ -30,10 +30,11 @@ Node (canvas `getContext`).
 
 ## Branch / PR plan (separate from this removal)
 
-1. **Branch `chore/wasm-telegram-prep`** (own PR): WASM build pipeline,
-   `index.html` entry migration (`public/js/main.js` → `/src/main.ts`,
-   `<canvas id="gameCanvas">` wiring), `dist/` output for Telegram hosting.
-   Status: not started — extent of existing WASM/Telegram prep is unknown.
+1. **Branch `chore/wasm-telegram-prep`** (own PR): WASM build pipeline and
+   `dist/` output for Telegram hosting. The `index.html` entry migration
+   (`public/js/main.js` → `/src/main.ts`, `<canvas id="gameCanvas">` wiring)
+   is already done (`feat/vite-entry-migration`).
+   Status: WASM/hosting prep not started — extent of existing prep is unknown.
 2. **Branch `feat/signed-score-anticheat`** (own PR, on top of the above):
    implement WASM signing + server verification + new tests. Do not reintroduce
    getter/setter honeypots.
