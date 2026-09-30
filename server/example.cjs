@@ -79,20 +79,21 @@ async function main() {
 					const userId = query.from?.id;
 					const chatId = query.message?.chat?.id;
 					const messageId = query.message?.message_id;
-					if (
+					const inlineMessageId = query.inline_message_id;
+					const launchIds =
 						Number.isInteger(userId) &&
-						Number.isInteger(chatId) &&
-						Number.isInteger(messageId)
-					) {
+						(Number.isInteger(chatId) && Number.isInteger(messageId)
+							? { userId, chatId, messageId }
+							: typeof inlineMessageId === "string" &&
+									inlineMessageId.length > 0
+								? { userId, inlineMessageId }
+								: null);
+					if (launchIds) {
 						// Mint a launch-bound session: token + session key travel in
-						// the answered URL (over TLS). Inline launches lack
-						// chat/message ids, so they get the plain URL and their
-						// scores are rejected until supported.
+						// the answered URL (over TLS). Works for message and inline
+						// launches alike.
 						const sessionId = randomBytes(16).toString("hex");
-						const lt = await core.issueLaunchToken(
-							{ userId, chatId, messageId },
-							SERVER_SECRET,
-						);
+						const lt = await core.issueLaunchToken(launchIds, SERVER_SECRET);
 						const sk = Buffer.from(
 							await core.deriveSessionKey(SERVER_SECRET, sessionId),
 						).toString("hex");
@@ -142,6 +143,7 @@ async function main() {
 						userId: launch.u,
 						chatId: launch.c,
 						messageId: launch.m,
+						inlineMessageId: launch.i,
 						score: body.score,
 					});
 					await telegram(call.method, call.params);

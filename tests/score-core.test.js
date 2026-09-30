@@ -44,14 +44,34 @@ async function validEnvelope(overrides = {}) {
 }
 
 describe("launch tokens", () => {
-	it("round-trips a valid token", async () => {
+	it("round-trips message and inline tokens", async () => {
 		const token = await issueLaunchToken(
 			{ userId: 7, chatId: 8, messageId: 9 },
 			SECRET,
 			NOW,
 		);
-		const payload = await verifyLaunchToken(token, SECRET, NOW + 10);
-		expect(payload).toMatchObject({ u: 7, c: 8, m: 9 });
+		expect(await verifyLaunchToken(token, SECRET, NOW + 10)).toMatchObject({
+			u: 7,
+			c: 8,
+			m: 9,
+		});
+
+		const inline = await issueLaunchToken(
+			{ userId: 7, inlineMessageId: "AAQAAxkBAAI" },
+			SECRET,
+			NOW,
+		);
+		expect(await verifyLaunchToken(inline, SECRET, NOW + 10)).toMatchObject({
+			u: 7,
+			i: "AAQAAxkBAAI",
+		});
+
+		const emptyInline = await issueLaunchToken(
+			{ userId: 7, inlineMessageId: "" },
+			SECRET,
+			NOW,
+		);
+		expect(await verifyLaunchToken(emptyInline, SECRET, NOW + 10)).toBeNull();
 	});
 
 	it("rejects tampered, expired, wrong-secret, and malformed tokens", async () => {
@@ -207,6 +227,12 @@ describe("misc", () => {
 		).toEqual({
 			method: "setGameScore",
 			params: { user_id: 1, chat_id: 2, message_id: 3, score: 250 },
+		});
+		expect(
+			buildSetGameScoreCall({ userId: 1, inlineMessageId: "AAQ", score: 250 }),
+		).toEqual({
+			method: "setGameScore",
+			params: { user_id: 1, inline_message_id: "AAQ", score: 250 },
 		});
 	});
 

@@ -79,7 +79,7 @@ describe("worker entry", () => {
 		}
 	});
 
-	it("replies to /start with a Play button", async () => {
+	it("answers /start by sending the game message", async () => {
 		const telegramMock = vi.fn(
 			async () => new Response(JSON.stringify({ ok: true })),
 		);
@@ -94,15 +94,52 @@ describe("worker entry", () => {
 				{ ...ENV, WEBHOOK_SECRET: "" },
 			);
 			expect(res.status).toBe(200);
+			// The game message carries Telegram's own working Play button —
+			// no custom buttons (callback_game is game-message-only).
 			const sent = telegramMock.mock.calls.find(([url]) =>
-				url.endsWith("/sendMessage"),
+				url.endsWith("/sendGame"),
 			);
 			expect(sent).toBeTruthy();
-			const params = JSON.parse(sent[1].body);
-			expect(params.chat_id).toBe(8);
-			expect(params.reply_markup.inline_keyboard[0][0].callback_game).toEqual(
-				{},
+			expect(JSON.parse(sent[1].body)).toEqual({
+				chat_id: 8,
+				game_short_name: "khanqah_rush",
+			});
+			expect(
+				telegramMock.mock.calls.filter(([url]) => url.endsWith("/sendMessage"))
+					.length,
+			).toBe(0);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("falls back to plain text when sendGame is rejected", async () => {
+		const telegramMock = vi.fn(async (url) => {
+			if (url.endsWith("/sendGame")) {
+				return new Response(
+					JSON.stringify({ ok: false, description: "Bad Request: rejected" }),
+				);
+			}
+			return new Response(JSON.stringify({ ok: true }));
+		});
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			const res = await worker.fetch(
+				post(
+					"/telegram-webhook",
+					{ message: { chat: { id: 8 }, text: "/start" } },
+					{},
+				),
+				{ ...ENV, WEBHOOK_SECRET: "" },
 			);
+			expect(res.status).toBe(200);
+			const sends = telegramMock.mock.calls.filter(([url]) =>
+				url.endsWith("/sendMessage"),
+			);
+			expect(sends.length).toBe(1);
+			const fallback = JSON.parse(sends[0][1].body);
+			expect(fallback.reply_markup).toBeUndefined();
+			expect(fallback.text).toContain("@KhanqahRushBot");
 		} finally {
 			vi.unstubAllGlobals();
 		}
@@ -187,6 +224,80 @@ describe("worker entry", () => {
 					.length,
 			).toBe(1);
 			expect(telegramMock.mock.calls.length).toBe(callsBefore + 1);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("mints sessions for inline launches and writes via inline_message_id", async () => {
+		const telegramMock = vi.fn(
+			async () => new Response(JSON.stringify({ ok: true })),
+		);
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			const res = await worker.fetch(
+				post(
+					"/telegram-webhook",
+					{
+						callback_query: {
+							id: "q9",
+							game_short_name: "khanqah_rush",
+							from: { id: 7 },
+							inline_message_id: "AAQAAxkBAAI",
+						},
+					},
+					{ "X-Telegram-Bot-Api-Secret-Token": "wh-secret" },
+				),
+				{ ...ENV },
+			);
+			expect(res.status).toBe(200);
+			const answer = telegramMock.mock.calls.find(([url]) =>
+				url.endsWith("/answerCallbackQuery"),
+			);
+			const params = JSON.parse(answer[1].body);
+			const url = new URL(params.url);
+			const lt = url.searchParams.get("lt");
+			const sid = url.searchParams.get("sid");
+			const sk = url.searchParams.get("sk");
+			expect(lt && sid && sk).toBeTruthy();
+
+			const key = await deriveSessionKey("test-secret", sid);
+			const { randomBytes } = await import("node:crypto");
+			const nonce = randomBytes(16).toString("hex");
+			const timestamp = Math.floor(Date.now() / 1000);
+			const canonical = [
+				"khanqah-v1",
+				sid,
+				"60",
+				"20",
+				nonce,
+				String(timestamp),
+			].join("\n");
+			const tag = createHmac("sha256", Buffer.from(key))
+				.update(canonical)
+				.digest("hex");
+			const posted = await worker.fetch(
+				post("/api/setScore", {
+					lt,
+					sid,
+					score: 60,
+					durationSec: 20,
+					nonce,
+					timestamp,
+					tag,
+				}),
+				{ ...ENV },
+			);
+			expect(posted.status).toBe(200);
+			const scoreCalls = telegramMock.mock.calls.filter(([url]) =>
+				url.endsWith("/setGameScore"),
+			);
+			expect(scoreCalls.length).toBe(1);
+			expect(JSON.parse(scoreCalls[0][1].body)).toMatchObject({
+				user_id: 7,
+				inline_message_id: "AAQAAxkBAAI",
+				score: 60,
+			});
 		} finally {
 			vi.unstubAllGlobals();
 		}

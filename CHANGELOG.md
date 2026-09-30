@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Inline-game support: launch tokens and `setGameScore` carry
+  `inline_message_id`, so scores from inline launches verify and record
+  instead of silently staying local.
+
 - Bot discovery: inline-query answers (needs BotFather `/setinline`) and a
   `/start` reply with a Play button.
 

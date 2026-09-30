@@ -46,14 +46,18 @@ async function telegram(env, method, params) {
 			body: JSON.stringify(params),
 		},
 	);
-	return res.json();
+	const data = await res.json().catch(() => ({}));
+	if (!data.ok) {
+		console.warn(`[worker] telegram ${method} failed`, JSON.stringify(data));
+	}
+	return data;
 }
 
 function serverSecret(env) {
 	return env.SERVER_SECRET || env.TELEGRAM_BOT_TOKEN;
 }
 
-async function handleWebhook(req, env) {
+async function handleUpdate(update, req, env) {
 	if (env.WEBHOOK_SECRET) {
 		const got = req.headers.get("x-telegram-bot-api-secret-token");
 		// Timing-safe compare without node:crypto (Workers-safe).
@@ -68,7 +72,6 @@ async function handleWebhook(req, env) {
 			return json({ ok: false }, 401);
 		}
 	}
-	const update = await req.json().catch(() => ({}));
 	if (update.inline_query) {
 		// Inline mode: answer with the game so typing @botname offers it.
 		// Requires /setinline on the bot (BotFather); without it Telegram
@@ -92,13 +95,21 @@ async function handleWebhook(req, env) {
 		update.message.text.startsWith("/start")
 	) {
 		if (env.TELEGRAM_BOT_TOKEN) {
-			await telegram(env, "sendMessage", {
+			// The entry point is a real game message: Telegram gives it a
+			// working Play button automatically. (callback_game buttons are
+			// only valid on game messages, and game links use ?game= form —
+			// a URL button to t.me/... goes nowhere.)
+			const sent = await telegram(env, "sendGame", {
 				chat_id: update.message.chat.id,
-				text: "🪓 Khanqah Rush — chop wood, dodge branches, don't get tired. Press Play!",
-				reply_markup: {
-					inline_keyboard: [[{ text: "🎮 Play", callback_game: {} }]],
-				},
+				game_short_name: env.GAME_SHORT_NAME,
 			});
+			if (!sent.ok) {
+				const handle = env.BOT_USERNAME || "KhanqahRushBot";
+				await telegram(env, "sendMessage", {
+					chat_id: update.message.chat.id,
+					text: `🪓 Khanqah Rush is live! Type @${handle} in any chat to play inline.`,
+				});
+			}
 		}
 		return json({ ok: true });
 	}
@@ -110,16 +121,17 @@ async function handleWebhook(req, env) {
 		const userId = query.from?.id;
 		const chatId = query.message?.chat?.id;
 		const messageId = query.message?.message_id;
-		if (
+		const inlineMessageId = query.inline_message_id;
+		const launchIds =
 			Number.isInteger(userId) &&
-			Number.isInteger(chatId) &&
-			Number.isInteger(messageId)
-		) {
+			(Number.isInteger(chatId) && Number.isInteger(messageId)
+				? { userId, chatId, messageId }
+				: typeof inlineMessageId === "string" && inlineMessageId.length > 0
+					? { userId, inlineMessageId }
+					: null);
+		if (launchIds) {
 			const sessionId = randomSessionId();
-			const lt = await issueLaunchToken(
-				{ userId, chatId, messageId },
-				serverSecret(env),
-			);
+			const lt = await issueLaunchToken(launchIds, serverSecret(env));
 			const sk = toHex(await deriveSessionKey(serverSecret(env), sessionId));
 			const sep = gameUrl.includes("?") ? "&" : "?";
 			url =
@@ -169,6 +181,7 @@ async function handleSetScore(req, env) {
 			userId: launch.u,
 			chatId: launch.c,
 			messageId: launch.m,
+			inlineMessageId: launch.i,
 			score: body.score,
 		});
 		await telegram(env, call.method, call.params);
@@ -183,7 +196,11 @@ export default {
 			return json({ ok: true });
 		}
 		if (req.method === "POST" && url.pathname === "/telegram-webhook") {
-			return handleWebhook(req, env);
+			const update = await req.json().catch(() => ({}));
+			console.log(
+				`[worker] update: ${update.inline_query ? "inline_query" : update.callback_query ? "callback_query" : update.message ? `message:${update.message.text ?? "?"}` : "unknown"}`,
+			);
+			return handleUpdate(update, req, env);
 		}
 		if (req.method === "POST" && url.pathname === "/api/setScore") {
 			return handleSetScore(req, env);
