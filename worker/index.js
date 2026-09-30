@@ -126,7 +126,7 @@ async function handleUpdate(update, req, env) {
 			Number.isInteger(userId) &&
 			(Number.isInteger(chatId) && Number.isInteger(messageId)
 				? { userId, chatId, messageId }
-				: typeof inlineMessageId === "string"
+				: typeof inlineMessageId === "string" && inlineMessageId.length > 0
 					? { userId, inlineMessageId }
 					: null);
 		if (launchIds) {

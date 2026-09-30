@@ -104,7 +104,7 @@ export async function issueLaunchToken(
 		u: userId,
 		exp: atSec + ttlSec,
 	};
-	if (typeof inlineMessageId === "string") {
+	if (typeof inlineMessageId === "string" && inlineMessageId.length > 0) {
 		payload.i = inlineMessageId;
 	} else {
 		payload.c = chatId;
@@ -147,7 +147,7 @@ export async function verifyLaunchToken(token, serverSecret, atSec = nowSec()) {
 		payload.exp < atSec ||
 		!Number.isInteger(payload.u) ||
 		!(
-			typeof payload.i === "string" ||
+			(typeof payload.i === "string" && payload.i.length > 0) ||
 			(Number.isInteger(payload.c) && Number.isInteger(payload.m))
 		)
 	) {

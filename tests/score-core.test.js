@@ -65,6 +65,13 @@ describe("launch tokens", () => {
 			u: 7,
 			i: "AAQAAxkBAAI",
 		});
+
+		const emptyInline = await issueLaunchToken(
+			{ userId: 7, inlineMessageId: "" },
+			SECRET,
+			NOW,
+		);
+		expect(await verifyLaunchToken(emptyInline, SECRET, NOW + 10)).toBeNull();
 	});
 
 	it("rejects tampered, expired, wrong-secret, and malformed tokens", async () => {
