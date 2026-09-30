@@ -95,13 +95,21 @@ async function handleUpdate(update, req, env) {
 		update.message.text.startsWith("/start")
 	) {
 		if (env.TELEGRAM_BOT_TOKEN) {
-			await telegram(env, "sendMessage", {
+			const sent = await telegram(env, "sendMessage", {
 				chat_id: update.message.chat.id,
 				text: "🪓 Khanqah Rush — chop wood, dodge branches, don't get tired. Press Play!",
 				reply_markup: {
 					inline_keyboard: [[{ text: "🎮 Play", callback_game: {} }]],
 				},
 			});
+			if (!sent.ok) {
+				// Rich markup (e.g. callback_game) rejected: degrade to plain
+				// text rather than staying silent.
+				await telegram(env, "sendMessage", {
+					chat_id: update.message.chat.id,
+					text: "🪓 Khanqah Rush is live! Open the game from the chat menu or inline @bot.",
+				});
+			}
 		}
 		return json({ ok: true });
 	}

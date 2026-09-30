@@ -103,6 +103,46 @@ describe("worker entry", () => {
 			expect(params.reply_markup.inline_keyboard[0][0].callback_game).toEqual(
 				{},
 			);
+			// No fallback: exactly one send.
+			expect(
+				telegramMock.mock.calls.filter(([url]) => url.endsWith("/sendMessage"))
+					.length,
+			).toBe(1);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("degrades to plain text when the rich /start reply is rejected", async () => {
+		const telegramMock = vi.fn(async (url) => {
+			if (url.endsWith("/sendMessage")) {
+				const calls = telegramMock.mock.calls.length;
+				return new Response(
+					JSON.stringify(
+						calls === 1
+							? { ok: false, description: "Bad Request: rejected" }
+							: { ok: true },
+					),
+				);
+			}
+			return new Response(JSON.stringify({ ok: true }));
+		});
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			const res = await worker.fetch(
+				post(
+					"/telegram-webhook",
+					{ message: { chat: { id: 8 }, text: "/start" } },
+					{},
+				),
+				{ ...ENV, WEBHOOK_SECRET: "" },
+			);
+			expect(res.status).toBe(200);
+			const sends = telegramMock.mock.calls.filter(([url]) =>
+				url.endsWith("/sendMessage"),
+			);
+			expect(sends.length).toBe(2);
+			expect(JSON.parse(sends[1][1].body).reply_markup).toBeUndefined();
 		} finally {
 			vi.unstubAllGlobals();
 		}
