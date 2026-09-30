@@ -95,26 +95,19 @@ async function handleUpdate(update, req, env) {
 		update.message.text.startsWith("/start")
 	) {
 		if (env.TELEGRAM_BOT_TOKEN) {
-			// NOTE: callback_game buttons are rejected on plain messages
-			// (proven live), so entry is a URL button to the game link.
-			const handle = env.BOT_USERNAME || "KhanqahRushBot";
-			const gameLink = `https://t.me/${handle}/${env.GAME_SHORT_NAME}`;
-			const sent = await telegram(env, "sendMessage", {
+			// The entry point is a real game message: Telegram gives it a
+			// working Play button automatically. (callback_game buttons are
+			// only valid on game messages, and game links use ?game= form —
+			// a URL button to t.me/... goes nowhere.)
+			const sent = await telegram(env, "sendGame", {
 				chat_id: update.message.chat.id,
-				text: "🪓 Khanqah Rush — chop wood, dodge branches, don't get tired. Press Play!",
-				reply_markup: {
-					inline_keyboard: [[{ text: "🎮 Play", url: gameLink }]],
-				},
+				game_short_name: env.GAME_SHORT_NAME,
 			});
 			if (!sent.ok) {
-				// Rich markup (e.g. callback_game on an unregistered game)
-				// rejected: degrade to plain text rather than staying silent.
 				const handle = env.BOT_USERNAME || "KhanqahRushBot";
 				await telegram(env, "sendMessage", {
 					chat_id: update.message.chat.id,
-					text:
-						"🪓 Khanqah Rush is live! Open the game from @" +
-						`${handle} inline, or press Play on the game message.`,
+					text: `🪓 Khanqah Rush is live! Type @${handle} in any chat to play inline.`,
 				});
 			}
 		}

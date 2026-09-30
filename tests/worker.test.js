@@ -79,7 +79,7 @@ describe("worker entry", () => {
 		}
 	});
 
-	it("replies to /start with a Play button", async () => {
+	it("answers /start by sending the game message", async () => {
 		const telegramMock = vi.fn(
 			async () => new Response(JSON.stringify({ ok: true })),
 		);
@@ -94,36 +94,30 @@ describe("worker entry", () => {
 				{ ...ENV, WEBHOOK_SECRET: "" },
 			);
 			expect(res.status).toBe(200);
+			// The game message carries Telegram's own working Play button —
+			// no custom buttons (callback_game is game-message-only).
 			const sent = telegramMock.mock.calls.find(([url]) =>
-				url.endsWith("/sendMessage"),
+				url.endsWith("/sendGame"),
 			);
 			expect(sent).toBeTruthy();
-			const params = JSON.parse(sent[1].body);
-			expect(params.chat_id).toBe(8);
-			expect(params.reply_markup.inline_keyboard[0][0]).toEqual({
-				text: "🎮 Play",
-				url: "https://t.me/KhanqahRushBot/khanqah_rush",
+			expect(JSON.parse(sent[1].body)).toEqual({
+				chat_id: 8,
+				game_short_name: "khanqah_rush",
 			});
-			// No fallback: exactly one send.
 			expect(
 				telegramMock.mock.calls.filter(([url]) => url.endsWith("/sendMessage"))
 					.length,
-			).toBe(1);
+			).toBe(0);
 		} finally {
 			vi.unstubAllGlobals();
 		}
 	});
 
-	it("degrades to plain text when the rich /start reply is rejected", async () => {
+	it("falls back to plain text when sendGame is rejected", async () => {
 		const telegramMock = vi.fn(async (url) => {
-			if (url.endsWith("/sendMessage")) {
-				const calls = telegramMock.mock.calls.length;
+			if (url.endsWith("/sendGame")) {
 				return new Response(
-					JSON.stringify(
-						calls === 1
-							? { ok: false, description: "Bad Request: rejected" }
-							: { ok: true },
-					),
+					JSON.stringify({ ok: false, description: "Bad Request: rejected" }),
 				);
 			}
 			return new Response(JSON.stringify({ ok: true }));
@@ -142,8 +136,8 @@ describe("worker entry", () => {
 			const sends = telegramMock.mock.calls.filter(([url]) =>
 				url.endsWith("/sendMessage"),
 			);
-			expect(sends.length).toBe(2);
-			const fallback = JSON.parse(sends[1][1].body);
+			expect(sends.length).toBe(1);
+			const fallback = JSON.parse(sends[0][1].body);
 			expect(fallback.reply_markup).toBeUndefined();
 			expect(fallback.text).toContain("@KhanqahRushBot");
 		} finally {
