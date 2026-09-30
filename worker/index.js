@@ -103,11 +103,14 @@ async function handleUpdate(update, req, env) {
 				},
 			});
 			if (!sent.ok) {
-				// Rich markup (e.g. callback_game) rejected: degrade to plain
-				// text rather than staying silent.
+				// Rich markup (e.g. callback_game on an unregistered game)
+				// rejected: degrade to plain text rather than staying silent.
+				const handle = env.BOT_USERNAME || "KhanqahRushBot";
 				await telegram(env, "sendMessage", {
 					chat_id: update.message.chat.id,
-					text: "🪓 Khanqah Rush is live! Open the game from the chat menu or inline @bot.",
+					text:
+						"🪓 Khanqah Rush is live! Open the game from @" +
+						`${handle} inline, or press Play on the game message.`,
 				});
 			}
 		}

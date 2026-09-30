@@ -6,6 +6,7 @@ compatibility_date = "2026-09-29"
 # WEBHOOK_SECRET) go via `wrangler secret put`. No KV, no storage.
 [vars]
 GAME_SHORT_NAME = "khanqah_rush"
+BOT_USERNAME = "KhanqahRushBot"
 
 # Static-asset hosting for the Vite build output; the Worker above handles
 # /telegram-webhook and /api/*, everything else falls through to dist/.

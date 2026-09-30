@@ -142,7 +142,9 @@ describe("worker entry", () => {
 				url.endsWith("/sendMessage"),
 			);
 			expect(sends.length).toBe(2);
-			expect(JSON.parse(sends[1][1].body).reply_markup).toBeUndefined();
+			const fallback = JSON.parse(sends[1][1].body);
+			expect(fallback.reply_markup).toBeUndefined();
+			expect(fallback.text).toContain("@KhanqahRushBot");
 		} finally {
 			vi.unstubAllGlobals();
 		}
