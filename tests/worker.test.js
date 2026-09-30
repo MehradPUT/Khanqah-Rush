@@ -100,9 +100,10 @@ describe("worker entry", () => {
 			expect(sent).toBeTruthy();
 			const params = JSON.parse(sent[1].body);
 			expect(params.chat_id).toBe(8);
-			expect(params.reply_markup.inline_keyboard[0][0].callback_game).toEqual(
-				{},
-			);
+			expect(params.reply_markup.inline_keyboard[0][0]).toEqual({
+				text: "🎮 Play",
+				url: "https://t.me/KhanqahRushBot/khanqah_rush",
+			});
 			// No fallback: exactly one send.
 			expect(
 				telegramMock.mock.calls.filter(([url]) => url.endsWith("/sendMessage"))

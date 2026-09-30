@@ -95,11 +95,15 @@ async function handleUpdate(update, req, env) {
 		update.message.text.startsWith("/start")
 	) {
 		if (env.TELEGRAM_BOT_TOKEN) {
+			// NOTE: callback_game buttons are rejected on plain messages
+			// (proven live), so entry is a URL button to the game link.
+			const handle = env.BOT_USERNAME || "KhanqahRushBot";
+			const gameLink = `https://t.me/${handle}/${env.GAME_SHORT_NAME}`;
 			const sent = await telegram(env, "sendMessage", {
 				chat_id: update.message.chat.id,
 				text: "🪓 Khanqah Rush — chop wood, dodge branches, don't get tired. Press Play!",
 				reply_markup: {
-					inline_keyboard: [[{ text: "🎮 Play", callback_game: {} }]],
+					inline_keyboard: [[{ text: "🎮 Play", url: gameLink }]],
 				},
 			});
 			if (!sent.ok) {
