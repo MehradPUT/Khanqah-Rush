@@ -1,6 +1,6 @@
 # Phase 1: repo tooling from backup
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 85
 - TAGS: setup, dx
 
