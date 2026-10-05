@@ -1,6 +1,6 @@
 # Khanqah Rush shortcuts. Run `make help` for the list.
 # Reads .env when present (values are never printed or committed).
-# More targets (wasm, deploy, bot ops) land with later phases.
+# More targets (wasm) land with later phases.
 
 ifeq ($(OS),Windows_NT)
 SHELL := sh.exe
@@ -41,6 +41,42 @@ lint: ## Lint + format check (biome)
 
 format: ## Format everything in place (biome)
 	npm run format
+
+deploy: ## Build + deploy dist/ to Cloudflare Workers (needs wrangler login)
+	npm run deploy
+
+dry-run: ## Validate wrangler.toml + assets without credentials
+	npx wrangler deploy --dry-run
+
+login: ## Log wrangler into Cloudflare (one time, browser)
+	npx wrangler login
+
+whoami: ## Show the active Cloudflare account
+	npx wrangler whoami
+
+secrets: ## Print the wrangler secret commands to run (values stay with you)
+	@echo "wrangler secret put TELEGRAM_BOT_TOKEN"
+	@echo "wrangler secret put SERVER_SECRET"
+	@echo "wrangler secret put WEBHOOK_SECRET"
+
+bot-info: ## Show the bot behind TELEGRAM_BOT_TOKEN (no secrets printed)
+	@if [ -z "$(TELEGRAM_BOT_TOKEN)" ]; then echo "Set TELEGRAM_BOT_TOKEN in .env first."; exit 1; fi
+	@curl -s "https://api.telegram.org/bot$(TELEGRAM_BOT_TOKEN)/getMe"
+
+webhook-set: ## Register GAME_URL/telegram-webhook with Telegram (needs .env)
+	@if [ -z "$(TELEGRAM_BOT_TOKEN)" ] || [ -z "$(GAME_URL)" ]; then echo "Set TELEGRAM_BOT_TOKEN and GAME_URL in .env first."; exit 1; fi
+	@secret=""; if [ -n "$(WEBHOOK_SECRET)" ]; then secret=",\"secret_token\":\"$(WEBHOOK_SECRET)\""; fi; \
+	curl -s -X POST "https://api.telegram.org/bot$(TELEGRAM_BOT_TOKEN)/setWebhook" \
+		-H "Content-Type: application/json" \
+		-d "{\"url\": \"$(GAME_URL)/telegram-webhook\"$$secret}"; echo
+
+webhook-info: ## Show current webhook status (no secrets printed)
+	@if [ -z "$(TELEGRAM_BOT_TOKEN)" ]; then echo "Set TELEGRAM_BOT_TOKEN in .env first."; exit 1; fi
+	@curl -s "https://api.telegram.org/bot$(TELEGRAM_BOT_TOKEN)/getWebhookInfo"; echo
+
+webhook-delete: ## Remove the Telegram webhook (drops to polling mode)
+	@if [ -z "$(TELEGRAM_BOT_TOKEN)" ]; then echo "Set TELEGRAM_BOT_TOKEN in .env first."; exit 1; fi
+	@curl -s -X POST "https://api.telegram.org/bot$(TELEGRAM_BOT_TOKEN)/deleteWebhook"; echo
 
 tasks: ## List open Tigo tasks by priority
 	tigo -c list

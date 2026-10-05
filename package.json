@@ -10,7 +10,8 @@
 		"test": "vitest run",
 		"check": "node scripts/check.mjs",
 		"lint": "biome check .",
-		"format": "biome check --write ."
+		"format": "biome check --write .",
+		"deploy": "npm run build && npx wrangler deploy"
 	},
 	"dependencies": {
 		"@twa-dev/sdk": "^7.0.0",
