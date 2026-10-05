@@ -7,3 +7,11 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
       - id: check-merge-conflict
+  - repo: local
+    hooks:
+      - id: biome-check
+        name: biome check
+        entry: npx @biomejs/biome check
+        language: system
+        types: [javascript, ts]
+        pass_filenames: false
