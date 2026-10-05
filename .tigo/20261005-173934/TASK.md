@@ -1,6 +1,6 @@
 # Phase 2: server and edge port
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 85
 - TAGS: backend, telegram
 
