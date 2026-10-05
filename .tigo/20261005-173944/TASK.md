@@ -1,6 +1,6 @@
 # Phase 3: WASM rebuild with plain-JS loaders
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 80
 - TAGS: wasm
 

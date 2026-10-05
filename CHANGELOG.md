@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- WASM rebuild: Rust signer/sim crates with replay CLI, `npm run wasm:build`
+  emitting gitignored `public/wasm/` artifacts, and plain-JS page loaders
+  (`public/js/*-loader.mjs`) with node:crypto and native-golden cross-checks.
+
 - Repo tooling: Biome (legacy bundle and minified CSS excluded from lint),
   pre-commit hooks, EditorConfig, LF enforcement, Node 24 pin, Vitest
   harness with a legacy-entry smoke test, GitHub Actions CI, Makefile
