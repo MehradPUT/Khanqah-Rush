@@ -17,3 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reimplementation on the upstream base (legacy PIXI-bundle game): hygiene,
   tooling, and Gates per `REIMPLEMENTATION.md` (uncommitted plan).
+- Games backend: framework-free score verification (`server/score-core.js`,
+  launch tokens, session keys, envelope + plausibility checks), reference
+  node adapter and production Worker entry (`BOT_USERNAME`/`GAME_SHORT_NAME`
+  vars), `npm run deploy`, and bot/webhook Makefile targets.
