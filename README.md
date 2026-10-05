@@ -1,4 +1,4 @@
-# 🪓 Khanqah Rush (خانقاه راش)
+# Khanqah Rush
 
 [![Vite](https://img.shields.io/badge/Vite-5.2-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![PixiJS](https://img.shields.io/badge/PixiJS-v4.0.2-E72264?logo=pixijs&logoColor=white)](https://pixijs.com/)
