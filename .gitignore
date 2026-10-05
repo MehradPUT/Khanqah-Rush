@@ -13,8 +13,19 @@ node_modules/
 
 # Vite / Build cache
 .vite/
+dist/
 dist-ssr/
 *.local
+
+# Built WASM artifacts (rebuilt via npm run wasm:build)
+public/wasm/
+wasm/*/target/
+
+# Wrangler local state
+.wrangler/
+
+# Test coverage
+coverage/
 
 # Logs
 logs
