@@ -35,13 +35,18 @@ message}` and XHR-POSTs to `KHANQAH_CONFIG.reportUrl || "/api/setScore"`.
 Our server contract matches this shape; signed envelopes ride alongside
 (see `public/js/score-report.mjs`, which observes instead of patching).
 
-## Branch spawner (off ~406513)
+## Branch spawner (off ~406513, init) and chop refill (off ~390100)
 
-Round init pushes 11 segment pairs via
-`da.push(a?-1:1,a?-2:2)` with `a = 500>=Math.floor(1E3*Math.random()+1)`
-(≈50/50). **Not** the 0.55/0.35 rules — the sim crate must be realigned
-to these exact rules in the sim-alignment phase; its current goldens
-mirror our old TS prototype, not this bundle.
+Init: `da=[0,0]`, then `for(...;11>da.length;)` pushes pairs
+(queue settles at even length 12).
+`(a?-1:1, a?-2:2)` with `a = 500>=Math.floor(1E3*Math.random()+1)` —
+a single 50/50 draw per pair. Entries encode side AND magnitude:
+`-1/-2` = LEFT, `1/2` = RIGHT, `0` = none. Magnitude matters:
+collision code treats `|x|===1` (shatterable) and `|x|===2`
+differently, with per-character ability interactions (fargol flame,
+ali flurry, ahmad shield, parsa sacrifice).
+Chop (`$a`, off ~390100): if `da.length` is odd, push a fresh pair;
+`shift()` one entry per chop.
 
 ## Honeypot (off ~379502, DECISION D3: stays live)
 

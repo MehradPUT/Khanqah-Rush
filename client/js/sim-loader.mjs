@@ -19,7 +19,7 @@
  * @property {() => Int8Array} segments
  */
 
-export const SIM_WIRE_VERSION = 1;
+export const SIM_WIRE_VERSION = 2;
 export const SIM_LEFT = 1;
 export const SIM_RIGHT = 2;
 
