@@ -8,7 +8,7 @@ import {
 	SIM_LEFT,
 	SIM_RIGHT,
 	SIM_WIRE_VERSION,
-} from "../public/js/sim-loader.mjs";
+} from "../client/js/sim-loader.mjs";
 
 // Goldens mirror wasm/sim's native unit tests byte-for-byte: the same
 // values asserted in Rust must come out of the compiled WASM artifact,
