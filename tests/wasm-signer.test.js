@@ -4,7 +4,7 @@ import {
 	canonicalEnvelope,
 	loadSigner,
 	SIGNER_WIRE_VERSION,
-} from "../public/js/signer-loader.mjs";
+} from "../client/js/signer-loader.mjs";
 
 // The loader must degrade gracefully: the game works with or without the
 // compiled module. Crypto correctness is cross-checked against node:crypto

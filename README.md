@@ -15,7 +15,7 @@ Chop the sacred tree as fast as possible while dodging incoming branches from th
 
 ### Controls
 * **Mobile / Touch**: Tap the left or right half of the screen to chop from that side.
-* **Keyboard**: Use `Arrow Left (◀)` and `Arrow Right (▶)` or `A` / `D`.
+* **Keyboard**: Use `Arrow Left (◀)` and `Arrow Right (▶)`, `A` / `D`, or vim-style `H` / `L` — in game and in the character menu.
 * **Mouse**: Click on-screen directional buttons or canvas zones.
 
 ---
