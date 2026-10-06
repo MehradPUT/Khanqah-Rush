@@ -23,8 +23,10 @@ N(M,"keydown",function(a){a.preventDefault();a=a.which||a.keyCode;aa?(37==a&&(Ka
   Menu ternaries take the keys bare (`(37==a||72==a)?…` — no trap there).
 - Menu-branch targets (each occurs exactly once):
   `37==a?rotateCharacter(-1)` and `39==a?rotateCharacter(1)`.
-- KeyCodes: H = 72, L = 76. Synthetic events are out: the bundle flags
-  `e.isTrusted === false` (see honeypot note).
+- KeyCodes: arrows 37/39, A = 65, D = 68, H = 72, L = 76 (A/D were
+  documented in the README but never wired — fixed by the same patches).
+  Synthetic events are out: the bundle flags `e.isTrusted === false`
+  (see honeypot note).
 
 ## Score submitter (off ~408077)
 

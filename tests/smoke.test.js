@@ -27,13 +27,13 @@ describe("legacy entry smoke", () => {
 		expect(fs.existsSync(path.join(root, "public/js/main.js"))).toBe(true);
 	});
 
-	it("binds H/L vim keys in gameplay and menu", () => {
+	it("binds arrows, A/D, and H/L in gameplay and menu", () => {
 		const bundle = read("public/js/main.js");
-		expect(bundle).toContain("(37==a||72==a)&&(Ka(La),Ca(!0))");
-		expect(bundle).toContain("(39==a||76==a)&&(Ka(jb),Ca(!1))");
+		expect(bundle).toContain("(37==a||65==a||72==a)&&(Ka(La),Ca(!0))");
+		expect(bundle).toContain("(39==a||68==a||76==a)&&(Ka(jb),Ca(!1))");
 		// Menu carousel follows the same keys.
-		expect(bundle).toContain("(37==a||72==a)?rotateCharacter(-1)");
-		expect(bundle).toContain("(39==a||76==a)?rotateCharacter(1)");
+		expect(bundle).toContain("(37==a||65==a||72==a)?rotateCharacter(-1)");
+		expect(bundle).toContain("(39==a||68==a||76==a)?rotateCharacter(1)");
 	});
 
 	it("keeps public/ and dist/ bundles identical", () => {
