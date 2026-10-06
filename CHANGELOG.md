@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Vim-style `H`/`L` chop keys in the legacy bundle (surgical keydown-patch,
+  mirrored to `dist/`; menu carousel keeps arrows).
+
 - WASM rebuild: Rust signer/sim crates with replay CLI, `npm run wasm:build`
   emitting gitignored `public/wasm/` artifacts, and plain-JS page loaders
   (`public/js/*-loader.mjs`) with node:crypto and native-golden cross-checks.
