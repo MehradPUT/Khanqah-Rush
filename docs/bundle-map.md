@@ -20,6 +20,9 @@ N(M,"keydown",function(a){a.preventDefault();a=a.which||a.keyCode;aa?(37==a&&(Ka
   `37==a&&(Ka(La),Ca(!0))` and `39==a&&(Ka(jb),Ca(!1))`.
 - H/L patch: parenthesize — `(37==a||72==a)&&(…)` — a bare
   `37==a||72==a&&(...)` would short-circuit past the action.
+  Menu ternaries take the keys bare (`(37==a||72==a)?…` — no trap there).
+- Menu-branch targets (each occurs exactly once):
+  `37==a?rotateCharacter(-1)` and `39==a?rotateCharacter(1)`.
 - KeyCodes: H = 72, L = 76. Synthetic events are out: the bundle flags
   `e.isTrusted === false` (see honeypot note).
 
