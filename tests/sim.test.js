@@ -32,8 +32,8 @@ describe("deterministic sim", () => {
 		expect(sim?.version()).toBe(SIM_WIRE_VERSION);
 
 		sim?.reset(42, 0);
-		expect(sim?.segmentCount()).toBe(10);
-		expect(Array.from(sim?.segments() ?? []).slice(0, 3)).toEqual([0, 0, 0]);
+		expect(sim?.segmentCount()).toBe(12);
+		expect(Array.from(sim?.segments() ?? []).slice(0, 2)).toEqual([0, 0]);
 
 		let ev = EV_ALREADY_DEAD;
 		let t = 0;
@@ -45,11 +45,11 @@ describe("deterministic sim", () => {
 			}
 		}
 		expect(ev).toBe(EV_DIED_BRANCH);
-		expect(sim?.score()).toBe(5);
+		expect(sim?.score()).toBe(3);
 		expect(sim?.alive()).toBe(false);
 		expect(sim?.deathReason()).toBe(DEATH_BRANCH);
-		expect(sim?.survivalMs()).toBe(1000);
-		expect(sim?.staminaMilli()).toBe(1000);
+		expect(sim?.survivalMs()).toBe(800);
+		expect(sim?.staminaMilli()).toBe(0);
 	});
 
 	it("rejects time travel and post-death input", async () => {

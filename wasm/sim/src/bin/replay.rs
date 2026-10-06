@@ -4,8 +4,7 @@
 //! Usage: replay <seed> <SIDE@t_ms,...> <end_t_ms>
 //!   SIDE is L or R. Example: replay 42 L@200,R@400,L@600 5000
 //!
-//! Prints: score=.. survival_ms=.. alive=.. death=.. stamina_milli=..
-//! rejuvenations=..  (death: none | branch | exhaustion)
+//! Prints: score=.. survival_ms=.. alive=.. death=.. stamina_left_ms=..
 
 use khanqah_sim::{Sim, SIDE_LEFT, SIDE_RIGHT};
 use std::env;
@@ -44,7 +43,11 @@ fn main() {
         "exhaustion"
     };
     println!(
-        "score={} survival_ms={} alive={} death={} stamina_milli={} rejuvenations={}",
-        sim.score, sim.survival_ms, sim.alive, death, sim.stamina_milli, sim.rejuvenations
+        "score={} survival_ms={} alive={} death={} stamina_left_ms={}",
+        sim.score,
+        sim.survival_ms,
+        sim.alive,
+        death,
+        sim.stamina_left_ms()
     );
 }

@@ -34,3 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   launch tokens, session keys, envelope + plausibility checks), reference
   node adapter and production Worker entry (`BOT_USERNAME`/`GAME_SHORT_NAME`
   vars), `npm run deploy`, and bot/webhook Makefile targets.
+
+### Changed
+
+- Sim core rewritten to legacy-bundle mechanics (pair-queue branches with
+  magnitudes, shift-on-chop with odd-length replenish, stamina deadlines,
+  no score on lethal chops; wire v2). Character abilities not yet modeled.
