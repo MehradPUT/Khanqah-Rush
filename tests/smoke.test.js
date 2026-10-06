@@ -38,4 +38,13 @@ describe("legacy entry smoke", () => {
 	it("keeps public/ and dist/ bundles identical", () => {
 		expect(read("public/js/main.js")).toBe(read("dist/js/main.js"));
 	});
+
+	it("wires the signed-report companion without bundle surgery", () => {
+		expect(read("index.html")).toContain("js/score-report.mjs");
+		const reporter = read("public/js/score-report.mjs");
+		expect(reporter).toContain("in_result");
+		expect(reporter).toContain("/api/setScore");
+		expect(reporter).toContain("signer-loader.mjs");
+		expect(reporter).not.toContain("TELEGRAM_BOT_TOKEN");
+	});
 });

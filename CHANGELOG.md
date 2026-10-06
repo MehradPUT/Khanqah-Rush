@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Signed score reporting for the legacy game via companion script
+  (`public/js/score-report.mjs`, wired in `index.html`): observes game-over
+  and posts WASM-signed envelopes with zero bundle surgery.
+
 - Vim-style `H`/`L` chop keys in the legacy bundle (surgical keydown-patch,
   mirrored to `dist/`; menu carousel keeps arrows).
 

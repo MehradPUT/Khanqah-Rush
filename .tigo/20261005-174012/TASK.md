@@ -1,6 +1,6 @@
 # Phase 4: legacy-bundle integration (RE, H/L keys, signed reporting)
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 90
 - TAGS: frontend, security
 
