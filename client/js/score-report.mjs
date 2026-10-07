@@ -120,92 +120,96 @@ function hideBadge() {
 }
 
 async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
-	const fail = (stage) => {
-		window.__khanqah.lastReport = stage;
+	const fail = (stage, detail) => {
+		window.__khanqah.lastReport = detail ? `${stage}: ${detail}` : stage;
 		showBadge(`✗ ${stage}`, "#b91c1c");
 	};
-	const signer = await loadSigner().catch(() => null);
-	if (!signer) {
-		fail("signer-missing");
-		return;
-	}
-	if (!signer.setSessionKey(launch.key)) {
-		fail("session-key");
-		return;
-	}
-	const raw = packTrace({
-		seedLo: launch.seed.seedLo,
-		seedHi: launch.seed.seedHi,
-		chops,
-		endTimeMs,
-	});
-	if (!raw) {
-		fail("pack-failed");
-		return;
-	}
-	const traceBytes = await deflateTrace(raw).catch(() => null);
-	if (!traceBytes) {
-		fail("deflate-failed");
-		return;
-	}
-	const trace = btoa(
-		Array.from(traceBytes)
-			.map((b) => String.fromCharCode(b))
-			.join(""),
-	);
-	const traceHash = await sha256Hex(traceBytes).catch(() => null);
-	if (!traceHash) {
-		fail("hash-failed");
-		return;
-	}
-	const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
-	const nonce = Array.from(nonceBytes)
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
-	const timestamp = Math.floor(Date.now() / 1000);
-	const tag = signer.signEnvelope({
-		sessionId: launch.sessionId,
-		score,
-		durationSec,
-		nonce,
-		timestamp,
-		traceHash,
-	});
-	if (!tag) {
-		fail("no-tag");
-		return;
-	}
-	let recorded = false;
-	let netError = false;
 	try {
-		const res = await fetch("/api/setScore", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				lt: launch.launchToken,
-				sid: launch.sessionId,
-				score,
-				durationSec,
-				nonce,
-				timestamp,
-				tag,
-				trace,
-				traceHash,
-			}),
+		const signer = await loadSigner().catch(() => null);
+		if (!signer) {
+			fail("signer-missing");
+			return;
+		}
+		if (!signer.setSessionKey(launch.key)) {
+			fail("session-key");
+			return;
+		}
+		const raw = packTrace({
+			seedLo: launch.seed.seedLo,
+			seedHi: launch.seed.seedHi,
+			chops,
+			endTimeMs,
 		});
-		recorded = !!(await res.json().catch(() => ({})))?.recorded;
-	} catch {
-		netError = true;
+		if (!raw) {
+			fail("pack-failed");
+			return;
+		}
+		const traceBytes = await deflateTrace(raw).catch(() => null);
+		if (!traceBytes) {
+			fail("deflate-failed");
+			return;
+		}
+		const trace = btoa(
+			Array.from(traceBytes)
+				.map((b) => String.fromCharCode(b))
+				.join(""),
+		);
+		const traceHash = await sha256Hex(traceBytes).catch(() => null);
+		if (!traceHash) {
+			fail("hash-failed");
+			return;
+		}
+		const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
+		const nonce = Array.from(nonceBytes)
+			.map((b) => b.toString(16).padStart(2, "0"))
+			.join("");
+		const timestamp = Math.floor(Date.now() / 1000);
+		const tag = signer.signEnvelope({
+			sessionId: launch.sessionId,
+			score,
+			durationSec,
+			nonce,
+			timestamp,
+			traceHash,
+		});
+		if (!tag) {
+			fail("no-tag");
+			return;
+		}
+		let recorded = false;
+		let netError = false;
+		try {
+			const res = await fetch("/api/setScore", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					lt: launch.launchToken,
+					sid: launch.sessionId,
+					score,
+					durationSec,
+					nonce,
+					timestamp,
+					tag,
+					trace,
+					traceHash,
+				}),
+			});
+			recorded = !!(await res.json().catch(() => ({})))?.recorded;
+		} catch {
+			netError = true;
+		}
+		if (netError) {
+			fail("net-error");
+			return;
+		}
+		window.__khanqah.lastReport = recorded ? "saved" : "rejected";
+		showBadge(
+			recorded ? "✓ score saved" : "✗ not recorded",
+			recorded ? "#15803d" : "#b91c1c",
+		);
+	} catch (err) {
+		fail("error", err instanceof Error ? err.message : String(err));
 	}
-	if (netError) {
-		fail("net-error");
-		return;
-	}
-	window.__khanqah.lastReport = recorded ? "saved" : "rejected";
-	showBadge(
-		recorded ? "✓ score saved" : "✗ not recorded",
-		recorded ? "#15803d" : "#b91c1c",
-	);
 }
 
 function watch() {
