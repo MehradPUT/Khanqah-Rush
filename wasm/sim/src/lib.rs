@@ -282,6 +282,14 @@ pub extern "C" fn sim_segments_len() -> usize {
 mod tests {
     use super::*;
 
+    #[test]
+    fn splitmix64_matches_published_vector() {
+        // Steele, Lea & Flood (2014): seed 0 first yields 0xe220a8397b1dcdaf.
+        let mut state = 0u64;
+        assert_eq!(splitmix64(&mut state), 0xe220a8397b1dcdaf);
+        assert_eq!(state, 0x9E37_79B9_7F4A_7C15);
+    }
+
     fn play(seed: u64, sides: &[i8], step_ms: u32) -> Sim {
         let mut sim = Sim::new(seed);
         let mut t = 0u32;
