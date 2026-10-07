@@ -173,13 +173,18 @@ async function handleUpdate(update, req, env) {
 
 async function handleSetScore(req, env) {
 	const body = await req.json().catch(() => ({}));
-	// Always 200 so probes learn nothing; reasons stay server-side.
+	// Always 200 so probes learn nothing; the recorded flag (also visible
+	// on the public leaderboard anyway) tells the game what happened.
+	const deny = (reason) => {
+		console.warn(`[worker] score rejected: ${reason}`);
+		return json({ ok: true, recorded: false });
+	};
 	const launch = await verifyLaunchToken(body.lt, serverSecret(env));
 	if (!launch) {
-		return json({ ok: true });
+		return deny("bad-launch");
 	}
 	if (!sessions.isCurrent(launch.u, body.sid)) {
-		return json({ ok: true });
+		return deny("stale-session");
 	}
 	const verified = await verifyEnvelope(
 		{
@@ -195,14 +200,14 @@ async function handleSetScore(req, env) {
 		{ serverSecret: serverSecret(env), nonceStore },
 	);
 	if (!verified.ok) {
-		return json({ ok: true });
+		return deny(`envelope-${verified.reason}`);
 	}
 	const plausible = checkPlausibility({
 		score: body.score,
 		durationSec: body.durationSec,
 	});
 	if (!plausible.ok) {
-		return json({ ok: true });
+		return deny(`plausibility-${plausible.reason}`);
 	}
 	const wasmBytes = await getSimWasm(env.ASSETS.fetch, new URL(req.url).origin);
 	const replayed = wasmBytes
@@ -218,7 +223,7 @@ async function handleSetScore(req, env) {
 			})
 		: { ok: false, reason: "no-wasm" };
 	if (!replayed.ok) {
-		return json({ ok: true });
+		return deny(`replay-${replayed.reason}`);
 	}
 	if (env.TELEGRAM_BOT_TOKEN) {
 		const call = buildSetGameScoreCall({
@@ -229,8 +234,9 @@ async function handleSetScore(req, env) {
 			score: body.score,
 		});
 		await telegram(env, call.method, call.params);
+		return json({ ok: true, recorded: true });
 	}
-	return json({ ok: true });
+	return deny("no-bot-token");
 }
 
 export default {

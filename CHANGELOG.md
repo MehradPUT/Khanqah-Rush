@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- In-game save indicator: the companion shows ● REC during rounds and
+  ✓ saved / ✗ not recorded after game over (the `recorded` flag the
+  server returns; `window.__khanqah` exposes state for debugging).
+
 - Server replay verification: traces replay through `sim.wasm` and must
   match the claimed outcome; seeds are server-derived and seed-shopped
   traces are rejected; single-active-session registry with issuance rate

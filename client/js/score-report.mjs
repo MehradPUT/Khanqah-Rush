@@ -70,6 +70,55 @@ function gameOver() {
 	);
 }
 
+const BADGE_ID = "khanqah-save-badge";
+
+function badge() {
+	let el = document.getElementById(BADGE_ID);
+	if (!el) {
+		el = document.createElement("div");
+		el.id = BADGE_ID;
+		el.style.cssText =
+			"position:fixed;left:50%;bottom:12px;transform:translateX(-50%);" +
+			"z-index:9999;pointer-events:none;font:700 12px system-ui,sans-serif;" +
+			"padding:4px 12px;border-radius:999px;display:none;color:#fff;";
+		document.body.appendChild(el);
+	}
+	return el;
+}
+
+let badgeTimer = 0;
+
+function showBadge(text, background, sticky = false) {
+	try {
+		const el = badge();
+		el.textContent = text;
+		el.style.background = background;
+		el.style.display = "block";
+		if (badgeTimer) {
+			clearTimeout(badgeTimer);
+			badgeTimer = 0;
+		}
+		if (!sticky) {
+			badgeTimer = window.setTimeout(() => {
+				el.style.display = "none";
+			}, 5000);
+		}
+	} catch {
+		// Badge must never disturb the game.
+	}
+}
+
+function hideBadge() {
+	try {
+		const el = document.getElementById(BADGE_ID);
+		if (el) {
+			el.style.display = "none";
+		}
+	} catch {
+		// Ignore.
+	}
+}
+
 async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 	const signer = await loadSigner();
 	if (!signer?.setSessionKey(launch.key)) {
@@ -105,27 +154,46 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		traceHash,
 	});
 	if (!tag) {
+		showBadge("✗ not recorded", "#b91c1c");
+		window.__khanqah.lastReport = "no-tag";
 		return;
 	}
-	await fetch("/api/setScore", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			lt: launch.launchToken,
-			sid: launch.sessionId,
-			score,
-			durationSec,
-			nonce,
-			timestamp,
-			tag,
-			trace,
-			traceHash,
-		}),
-	});
+	let recorded = false;
+	try {
+		const res = await fetch("/api/setScore", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				lt: launch.launchToken,
+				sid: launch.sessionId,
+				score,
+				durationSec,
+				nonce,
+				timestamp,
+				tag,
+				trace,
+				traceHash,
+			}),
+		});
+		recorded = !!(await res.json().catch(() => ({})))?.recorded;
+	} catch {
+		// Network failure counts as not recorded.
+	}
+	window.__khanqah.lastReport = recorded ? "saved" : "rejected";
+	showBadge(
+		recorded ? "✓ score saved" : "✗ not recorded",
+		recorded ? "#15803d" : "#b91c1c",
+	);
 }
 
 function watch() {
 	const launch = readLaunch();
+	window.__khanqah = {
+		hasLaunch: !!launch,
+		recording: false,
+		lastReport: "none",
+		chops: 0,
+	};
 	if (!launch) {
 		return;
 	}
@@ -167,11 +235,16 @@ function watch() {
 					chops = [];
 				}
 				reported = false;
+				window.__khanqah.recording = true;
+				window.__khanqah.chops = chops.length;
+				showBadge("● REC", "#b45309", true);
 				return;
 			}
+			window.__khanqah.recording = false;
 			if (score === 0) {
 				roundStart = null;
 				chops = [];
+				hideBadge();
 			}
 			if (score > 0 && gameOver() && !reported && roundStart !== null) {
 				reported = true;

@@ -130,13 +130,18 @@ async function main() {
 
 			if (req.method === "POST" && req.url === "/api/setScore") {
 				const body = await readJson(req);
-				// Always 200 so probes learn nothing; reasons stay server-side.
+				// Always 200 so probes learn nothing; the recorded flag (also
+				// visible on the public leaderboard anyway) tells the game.
+				const deny = (reason) => {
+					console.warn(`[example] score rejected: ${reason}`);
+					return json(res, 200, { ok: true, recorded: false });
+				};
 				const launch = await core.verifyLaunchToken(body.lt, SERVER_SECRET);
 				if (!launch) {
-					return json(res, 200, { ok: true });
+					return deny("bad-launch");
 				}
 				if (!sessions.isCurrent(launch.u, body.sid)) {
-					return json(res, 200, { ok: true });
+					return deny("stale-session");
 				}
 				const verified = await core.verifyEnvelope(
 					{
@@ -152,14 +157,14 @@ async function main() {
 					{ serverSecret: SERVER_SECRET, nonceStore },
 				);
 				if (!verified.ok) {
-					return json(res, 200, { ok: true });
+					return deny(`envelope-${verified.reason}`);
 				}
 				const plausible = core.checkPlausibility({
 					score: body.score,
 					durationSec: body.durationSec,
 				});
 				if (!plausible.ok) {
-					return json(res, 200, { ok: true });
+					return deny(`plausibility-${plausible.reason}`);
 				}
 				const wasmBytes = await getSimWasm();
 				const replayed = wasmBytes
@@ -172,7 +177,7 @@ async function main() {
 						})
 					: { ok: false, reason: "no-wasm" };
 				if (!replayed.ok) {
-					return json(res, 200, { ok: true });
+					return deny(`replay-${replayed.reason}`);
 				}
 				if (BOT_TOKEN) {
 					const call = core.buildSetGameScoreCall({
@@ -183,8 +188,9 @@ async function main() {
 						score: body.score,
 					});
 					await telegram(call.method, call.params);
+					return json(res, 200, { ok: true, recorded: true });
 				}
-				return json(res, 200, { ok: true });
+				return deny("no-bot-token");
 			}
 
 			return json(res, 404, { ok: false });

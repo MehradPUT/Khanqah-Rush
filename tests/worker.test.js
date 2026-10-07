@@ -326,6 +326,10 @@ describe("worker entry", () => {
 				return;
 			}
 			expect(played.response.status).toBe(200);
+			expect(await played.response.clone().json()).toEqual({
+				ok: true,
+				recorded: true,
+			});
 			const scoreCalls = telegramMock.mock.calls.filter(([url]) =>
 				url.endsWith("/setGameScore"),
 			);
@@ -351,6 +355,7 @@ describe("worker entry", () => {
 				...ENV,
 			});
 			expect(bad.status).toBe(200);
+			expect(await bad.json()).toEqual({ ok: true, recorded: false });
 			expect(
 				telegramMock.mock.calls.filter(([url]) => url.endsWith("/setGameScore"))
 					.length,
@@ -400,6 +405,10 @@ describe("worker entry", () => {
 				return;
 			}
 			expect(played.response.status).toBe(200);
+			expect(await played.response.clone().json()).toEqual({
+				ok: true,
+				recorded: true,
+			});
 			const scoreCalls = telegramMock.mock.calls.filter(([url]) =>
 				url.endsWith("/setGameScore"),
 			);
