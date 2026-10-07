@@ -49,6 +49,7 @@ describe("legacy entry smoke", () => {
 		expect(reporter).toContain("khanqah-save-badge");
 		expect(reporter).toContain("recorded");
 		expect(reporter).toContain("signer-missing");
+		expect(reporter).toContain("launch.seed.seedLo");
 		expect(reporter).not.toContain("TELEGRAM_BOT_TOKEN");
 	});
 });

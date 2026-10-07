@@ -134,8 +134,8 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		return;
 	}
 	const raw = packTrace({
-		seedLo: launch.seed.lo,
-		seedHi: launch.seed.hi,
+		seedLo: launch.seed.seedLo,
+		seedHi: launch.seed.seedHi,
 		chops,
 		endTimeMs,
 	});
