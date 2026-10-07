@@ -39,6 +39,10 @@ Our server contract matches this shape; signed envelopes ride alongside
 
 Init: `da=[0,0]`, then `for(...;11>da.length;)` pushes pairs
 (queue settles at even length 12).
+Patched: both spawn draws now call `window.__rng50()` (from
+`public/js/seeded-rng.js`, loaded before the bundle) instead of inline
+`Math.random()` — one seeded draw per pair, stream-identical to the sim.
+Unseeded opens fall back to legacy behavior (local-only play).
 `(a?-1:1, a?-2:2)` with `a = 500>=Math.floor(1E3*Math.random()+1)` —
 a single 50/50 draw per pair. Entries encode side AND magnitude:
 `-1/-2` = LEFT, `1/2` = RIGHT, `0` = none. Magnitude matters:

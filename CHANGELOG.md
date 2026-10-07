@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Seeded bundle spawns: both spawn draws call the seeded `__rng50()`
+  stream (reset per round by the companion's capture-phase primer);
+  unseeded opens keep legacy behavior.
+
 - Legacy board endpoint (`POST /api/getHighScores` answers empty instead
   of falling through to a 500) and favicon stub silencing console noise.
 

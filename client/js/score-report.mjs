@@ -226,6 +226,47 @@ function watch() {
 	let roundStart = null;
 	let reported = false;
 	let chops = [];
+	// Pre-round stream reset: capture-phase listeners run before the
+	// bundle's own handlers in the same user gesture, so the seeded stream
+	// restarts ahead of the round-init draws. Poll-based reset would come
+	// up to 500 ms too late (after the draws already consumed stream).
+	const primeStream = () => {
+		try {
+			if (!inGame() && typeof window.__rngReset === "function") {
+				window.__rngReset();
+			}
+		} catch {
+			// Reset is best-effort; the trace still records.
+		}
+	};
+	window.addEventListener("keydown", primeStream, true);
+	window.addEventListener("pointerdown", primeStream, true);
+	// Round transitions via MutationObserver: near-zero delay, so chops
+	// landing between transition and the next poll tick are still caught.
+	// (Sub-frame machine-speed inputs remain a known residual.)
+	const syncRoundState = () => {
+		try {
+			if (inGame() && !gameOver()) {
+				if (roundStart === null) {
+					// Stream already reset by the primer; never reset here.
+					roundStart = Date.now();
+					chops = [];
+				}
+			} else if (!inGame()) {
+				roundStart = null;
+				chops = [];
+			}
+		} catch {
+			// Observer must never disturb the game.
+		}
+	};
+	const wrap = document.getElementById("page_wrap");
+	if (wrap && typeof MutationObserver !== "undefined") {
+		new MutationObserver(syncRoundState).observe(wrap, {
+			attributes: true,
+			attributeFilter: ["class"],
+		});
+	}
 	const record = (side) => {
 		try {
 			if (roundStart === null || !inGame() || gameOver()) {
@@ -256,10 +297,7 @@ function watch() {
 		try {
 			const score = currentScore();
 			if (inGame() && !gameOver()) {
-				if (roundStart === null) {
-					roundStart = Date.now();
-					chops = [];
-				}
+				syncRoundState();
 				reported = false;
 				window.__khanqah.recording = true;
 				window.__khanqah.chops = chops.length;

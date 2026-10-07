@@ -40,6 +40,17 @@ describe("legacy entry smoke", () => {
 		expect(read("public/js/main.js")).toBe(read("dist/js/main.js"));
 	});
 
+	it("wires the seeded RNG bootstrap before the bundle", () => {
+		const html = read("index.html");
+		const bootstrapPos = html.indexOf("js/seeded-rng.js");
+		const bundlePos = html.indexOf("js/main.js");
+		expect(bootstrapPos).toBeGreaterThanOrEqual(0);
+		expect(bundlePos).toBeGreaterThan(bootstrapPos);
+		const bundle = read("public/js/main.js");
+		expect(bundle.split("window.__rng50()").length - 1).toBe(2);
+		expect(bundle).not.toContain("1E3*Math.random()+1");
+	});
+
 	it("wires the signed-report companion without bundle surgery", () => {
 		expect(read("index.html")).toContain("/client/js/score-report.mjs");
 		const reporter = read("client/js/score-report.mjs");
