@@ -274,6 +274,11 @@ function watch() {
 	let roundStart = null;
 	let reported = false;
 	let chops = [];
+	// Frozen finished round awaiting the poll's report. The bundle drops
+	// `in_game` and raises `in_result` in the same synchronous block, so
+	// the observer must freeze — never wipe — a round that just ended;
+	// otherwise the poll finds empty hands and skips the report.
+	let pending = null;
 	let overLogged = false;
 	let skipLogged = false;
 	// Pre-round stream reset: capture-phase listeners run before the
@@ -301,17 +306,31 @@ function watch() {
 					// Stream already reset by the primer; never reset here.
 					roundStart = Date.now();
 					chops = [];
+					pending = null;
 					dlog("round start seen", { classes: wrapClasses() });
 				}
-			} else if (!inGame()) {
+			} else if (gameOver()) {
 				if (roundStart !== null) {
-					dlog("round cleared (left in_game)", {
+					pending = { chops, roundStart };
+					dlog("round frozen for report", {
+						classes: wrapClasses(),
+						chops: chops.length,
+						score: currentScore(),
+					});
+					roundStart = null;
+					chops = [];
+				}
+			} else if (!inGame()) {
+				// Menu without a result (mid-round quit): nothing to report.
+				if (roundStart !== null || pending !== null) {
+					dlog("round discarded (menu, no result)", {
 						classes: wrapClasses(),
 						chops: chops.length,
 					});
 				}
 				roundStart = null;
 				chops = [];
+				pending = null;
 			}
 		} catch {
 			// Observer must never disturb the game.
@@ -361,6 +380,7 @@ function watch() {
 				score,
 				chops: chops.length,
 				roundActive: roundStart !== null,
+				hasPending: pending !== null,
 				reported,
 				classes: wrapClasses(),
 			};
@@ -380,32 +400,49 @@ function watch() {
 					score,
 					chops: chops.length,
 					roundActive: roundStart !== null,
+					hasPending: pending !== null,
 					reported,
 					classes: wrapClasses(),
 				});
 			}
 			window.__khanqah.recording = false;
-			if (score === 0) {
+			if (score === 0 && !gameOver()) {
+				// Idle menu: result gone, score reset — drop everything.
+				// (While the result screen still shows, a 0 read is
+				// transient: keep a frozen pending report.)
 				roundStart = null;
 				chops = [];
+				pending = null;
 				hideBadge();
 			}
-			if (score > 0 && gameOver() && !reported && roundStart !== null) {
+			// Prefer live data (observer may not have run yet); fall back
+			// to the frozen round.
+			const src = roundStart !== null ? { chops, roundStart } : pending;
+			if (
+				score > 0 &&
+				gameOver() &&
+				!reported &&
+				src !== null &&
+				src.roundStart !== null
+			) {
 				reported = true;
-				const endTimeMs = Date.now() - roundStart;
+				pending = null;
+				const endTimeMs = Date.now() - src.roundStart;
 				const durationSec = Math.max(1, Math.round(endTimeMs / 1000));
 				dlog("firing report", {
 					score,
 					durationSec,
-					chops: chops.length,
+					chops: src.chops.length,
 					endTimeMs,
 				});
-				void reportOnce(launch, score, durationSec, chops, endTimeMs).catch(
+				void reportOnce(launch, score, durationSec, src.chops, endTimeMs).catch(
 					() => {},
 				);
+				roundStart = null;
+				chops = [];
 			} else if (gameOver() && !reported && !skipLogged) {
 				skipLogged = true;
-				dlog("report skipped", { score, roundActive: roundStart !== null });
+				dlog("report skipped", { score, hasPending: pending !== null });
 			}
 		} catch {
 			// Observer must never disturb the game.
