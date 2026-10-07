@@ -421,6 +421,11 @@ export async function replayTrace({
 	}
 	const seed = (BigInt(trace.seedHi >>> 0) << 32n) | BigInt(trace.seedLo >>> 0);
 	sim.sim_reset(Number(seed & 0xffffffffn), Number(seed >> 32n));
+	// Trace v1 carries no hero id; pin Nima explicitly (also the sim's
+	// default). Non-Nima rounds replay-mismatch by design until trace v2.
+	if (typeof sim.sim_set_character === "function") {
+		sim.sim_set_character(0);
+	}
 	for (const chop of trace.chops) {
 		// sim sides: 1 = LEFT, 2 = RIGHT; trace sides: 0 = LEFT, 1 = RIGHT.
 		const ev = sim.sim_chop(chop.side === 0 ? 1 : 2, chop.t);

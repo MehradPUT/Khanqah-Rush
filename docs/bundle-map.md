@@ -65,3 +65,14 @@ the companion reporter relies on that.
 `ma(T,"in_result",h)` toggles the `in_result` class on `#page_wrap`
 (`h` truthy = round over). The companion reporter watches this plus
 `window.score`; no bundle hooks required.
+
+## Stamina and Nima rejuvenation (sim-critical)
+
+Stamina is a deadline timestamp (`ba`): first chop sets `now + 4250 ms`,
+each survived chop adds 250 ms capped at `now + 8500 ms`; passing the
+deadline without chopping ends the round. Nima's cycle runs on a 20 s
+period: while the cycle position sits at >= 15 s, `ba` is pinned to
+`now + qa` (full window) every frame, so a round alive at 15 s carries
+through to ~28.5 s even idle. Other heroes' abilities (fargol flame,
+ali flurry, ahmad shield, parsa sacrifice) interact with the`|x| === 1`
+shatter path and are not yet modeled in the sim.

@@ -6,6 +6,7 @@
  * @typedef {object} Sim
  * @property {() => number} version
  * @property {(lo: number, hi: number) => void} reset
+ * @property {(id: number) => void} [setCharacter]
  * @property {(side: number, tMs: number) => number} chop
  * @property {(tMs: number) => number} advanceIdle
  * @property {() => number} score
@@ -63,6 +64,12 @@ function wrap(exports) {
 	return {
 		version: () => raw.sim_version(),
 		reset: (lo, hi) => raw.sim_reset(lo, hi),
+		// Optional: older artifacts predate the hero model. The sim
+		// defaults to Nima (id 0), so absence only matters for
+		// non-Nima rounds, which replay-mismatch by design.
+		...(typeof raw.sim_set_character === "function"
+			? { setCharacter: (id) => raw.sim_set_character(id) }
+			: {}),
 		chop: (side, t) => raw.sim_chop(side, t),
 		advanceIdle: (t) => raw.sim_advance_idle(t),
 		score: () => raw.sim_score(),

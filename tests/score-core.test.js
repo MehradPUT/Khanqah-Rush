@@ -396,6 +396,60 @@ describe("deterministic replay", () => {
 		expect(result.replayed).toMatchObject({ score: 2, alive: false });
 	});
 
+	it("accepts a rejuvenation-assisted round as Nima", async () => {
+		const wasmBytes = await simWasm();
+		if (!wasmBytes) {
+			return;
+		}
+		// Generate safe-side play into the first 15 s window with the
+		// same artifact the server replays, then idle past the plain
+		// deadline: only the rejuvenation model keeps the claim alive.
+		const { loadSim } = await import("../client/js/sim-loader.mjs");
+		const sim = await loadSim(
+			async () => new Response(wasmBytes, { status: 200 }),
+			"/",
+		);
+		if (!sim) {
+			return;
+		}
+		const seedHex = await deriveSeed(SECRET, "sid-rejuv");
+		const seedBytes = Buffer.from(seedHex, "hex");
+		const view = new DataView(
+			seedBytes.buffer,
+			seedBytes.byteOffset,
+			seedBytes.byteLength,
+		);
+		const seedLo = view.getUint32(0, true);
+		const seedHi = view.getUint32(4, true);
+		sim.reset(seedLo, seedHi);
+		const chops = [];
+		let t = 0;
+		for (let i = 0; i < 100; i++) {
+			t += 150;
+			const bottom = (sim.segments() ?? [])[0] ?? 0;
+			const side = bottom < 0 ? 1 : 0;
+			const ev = sim.chop(bottom < 0 ? 2 : 1, t);
+			if (ev !== 0) {
+				break;
+			}
+			chops.push({ side, t });
+		}
+		expect(chops.length).toBe(100);
+		const endTimeMs = t + 9000;
+		const raw = packTrace({ seedLo, seedHi, chops, endTimeMs });
+		const comp = await deflateTrace(raw);
+		const traceB64 = Buffer.from(comp).toString("base64");
+		const result = await replayTrace({
+			traceB64,
+			wasmBytes,
+			claimed: { score: 100, alive: true, deathBranch: false },
+			serverSecret: SECRET,
+			sessionId: "sid-rejuv",
+		});
+		expect(result.ok).toBe(true);
+		expect(result.replayed).toMatchObject({ score: 100, alive: true });
+	});
+
 	it("rejects inflated claims and garbage traces", async () => {
 		const wasmBytes = await simWasm();
 		if (!wasmBytes) {

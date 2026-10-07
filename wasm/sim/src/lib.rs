@@ -25,6 +25,17 @@ pub const SIDE_NONE: i8 = 0;
 pub const SIDE_LEFT: i8 = 1;
 pub const SIDE_RIGHT: i8 = 2;
 
+// Character ids (trace header). Only Nima's rejuvenation cycle is
+// modeled; other heroes' abilities are future work and their rounds
+// replay-mismatch by design (documented, tracked).
+pub const CHAR_NIMA: u8 = 0;
+
+// Nima rejuvenation: 20 s cycle, stamina pinned full while
+// cycle position >= 15 s (legacy `ba = now + qa` every frame there).
+const REJUV_CYCLE_MS: u32 = 20_000;
+const REJUV_FROM_MS: u32 = 15_000;
+const REJUV_WINDOW_MS: u32 = REJUV_CYCLE_MS - REJUV_FROM_MS;
+
 // Event codes returned by chop/advance.
 pub const EV_ALIVE: u32 = 0;
 pub const EV_DIED_BRANCH: u32 = 1;
@@ -53,6 +64,31 @@ fn branch_on(side: i8) -> bool {
     side < 0
 }
 
+fn in_rejuv_window(t_ms: u32) -> bool {
+    t_ms % REJUV_CYCLE_MS >= REJUV_FROM_MS
+}
+
+/// End (exclusive) of the rejuvenation window containing `t_ms`.
+fn rejuv_window_exit(t_ms: u32) -> u32 {
+    t_ms - t_ms % REJUV_CYCLE_MS + REJUV_CYCLE_MS
+}
+
+/// Start of the first rejuvenation window strictly after `t_ms`.
+/// None only on u32 overflow (round clocks never get there).
+fn first_rejuv_start_after(t_ms: u32) -> Option<u32> {
+    let k = if t_ms < REJUV_FROM_MS {
+        0u64
+    } else {
+        (t_ms - REJUV_FROM_MS) as u64 / REJUV_CYCLE_MS as u64 + 1
+    };
+    let start = k * REJUV_CYCLE_MS as u64 + REJUV_FROM_MS as u64;
+    if start > u32::MAX as u64 {
+        None
+    } else {
+        Some(start as u32)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Sim {
     rng: u64,
@@ -65,6 +101,9 @@ pub struct Sim {
     pub last_t_ms: u32,
     pub queue: [i8; QUEUE_CAP],
     pub queue_len: usize,
+    pub character: u8,
+    pub rejuvenations: u32,
+    entered_rejuv: bool,
 }
 
 impl Sim {
@@ -80,6 +119,9 @@ impl Sim {
             last_t_ms: 0,
             queue: [SIDE_NONE; QUEUE_CAP],
             queue_len: 0,
+            character: CHAR_NIMA,
+            rejuvenations: 0,
+            entered_rejuv: false,
         };
         // da=[0,0], then pairs while length < 11.
         sim.push_raw(SIDE_NONE);
@@ -118,10 +160,43 @@ impl Sim {
     /// Advance the clock; returns true on exhaustion death.
     fn advance_to(&mut self, t_ms: u32) -> bool {
         self.survival_ms = self.survival_ms.max(t_ms as u64);
-        self.last_t_ms = self.last_t_ms.max(t_ms);
+        let prev = self.last_t_ms;
+        self.last_t_ms = prev.max(t_ms);
         // Stamina deadline (legacy `ba`): the initial grace counts from
         // round start even before the first chop refreshes it.
-        if self.alive && t_ms > self.deadline_ms {
+        // Nima rejuvenation: while the 20 s cycle sits at >= 15 s, legacy
+        // pins the deadline to now + full window every frame. A jump that
+        // lands inside or past a window must credit pinning for the
+        // crossed span, not just the landing position: reaching a window
+        // alive carries the round through it (deadline tracks ahead of
+        // the clock the whole time). At most one fresh window can extend
+        // survival per advance — pinning through a full window sets
+        // deadline = exit + 8500, which always precedes the next start.
+        if self.alive && self.character == CHAR_NIMA {
+            let was_in = in_rejuv_window(prev);
+            let now_in = in_rejuv_window(t_ms);
+            if was_in {
+                let exit = rejuv_window_exit(prev);
+                self.deadline_ms = self
+                    .deadline_ms
+                    .max(t_ms.min(exit).saturating_add(MAX_DEADLINE_AHEAD_MS));
+                if !self.entered_rejuv {
+                    self.rejuvenations += 1;
+                }
+            } else if let Some(start) = first_rejuv_start_after(prev) {
+                if start <= t_ms && start <= self.deadline_ms {
+                    let exit = start.saturating_add(REJUV_WINDOW_MS);
+                    self.deadline_ms = t_ms.min(exit).saturating_add(MAX_DEADLINE_AHEAD_MS);
+                    self.rejuvenations += 1;
+                }
+            }
+            self.entered_rejuv = now_in;
+            if t_ms > self.deadline_ms {
+                self.alive = false;
+                self.death_branch = false;
+                return true;
+            }
+        } else if self.alive && t_ms > self.deadline_ms {
             self.alive = false;
             self.death_branch = false;
             return true;
@@ -233,7 +308,15 @@ pub extern "C" fn sim_stamina_milli() -> i32 {
     game_mut().stamina_left_ms() as i32
 }
 
-/// 0 = old phase model retired (legacy has no phases); always 0.
+/// Select the hero model. 0 = Nima (rejuvenation modeled); anything else
+/// runs base mechanics, whose outcome will mismatch ability rounds.
+#[no_mangle]
+pub extern "C" fn sim_set_character(id: u8) {
+    game_mut().character = id;
+}
+
+/// Legacy has no old/young phase counter apart from rejuvenation count;
+/// kept for ABI stability, always 0.
 #[no_mangle]
 pub extern "C" fn sim_phase() -> u32 {
     0
@@ -246,7 +329,7 @@ pub extern "C" fn sim_survival_ms() -> u64 {
 
 #[no_mangle]
 pub extern "C" fn sim_rejuvenations() -> u32 {
-    0
+    game_mut().rejuvenations
 }
 
 /// 1 = alive, 0 = dead.
@@ -382,5 +465,64 @@ mod tests {
         sim.chop(SIDE_LEFT, 200);
         assert_eq!(sim.chop(SIDE_LEFT, 300), EV_DIED_BRANCH);
         assert_eq!(sim.score, 2);
+    }
+
+    /// Chop the safe side of whatever sits at the queue bottom.
+    fn chop_safe(sim: &mut Sim, t_ms: u32) -> u32 {
+        let side = if sim.queue[0] < 0 { SIDE_RIGHT } else { SIDE_LEFT };
+        sim.chop(side, t_ms)
+    }
+
+    #[test]
+    fn nima_rejuvenation_bridges_idle_past_deadline() {
+        // Keep chopping into the first window, then go idle past what the
+        // plain deadline would allow. Nima pins through the window and
+        // lives; a non-Nima hero dies of exhaustion on the same inputs.
+        let mut nima = Sim::new(42);
+        let mut t = 0u32;
+        for _ in 0..100 {
+            t += 150;
+            assert_eq!(chop_safe(&mut nima, t), EV_ALIVE);
+        }
+        assert_eq!(t, 15_000);
+        assert_eq!(nima.rejuvenations, 1);
+        assert_eq!(nima.advance_idle(24_000), EV_ALIVE);
+        assert!(nima.alive);
+
+        let mut other = Sim::new(42);
+        other.character = 1;
+        let mut t = 0u32;
+        for _ in 0..100 {
+            t += 150;
+            assert_eq!(chop_safe(&mut other, t), EV_ALIVE);
+        }
+        assert_eq!(other.rejuvenations, 0);
+        assert_eq!(other.advance_idle(24_000), EV_DIED_EXHAUSTION);
+        assert!(!other.alive);
+        assert!(!other.death_branch);
+    }
+
+    #[test]
+    fn rejuvenation_counts_one_per_window() {
+        // Safe-side play straight through two windows counts each entry
+        // once and never dies of exhaustion mid-window.
+        let mut sim = Sim::new(7);
+        let mut t = 0u32;
+        for _ in 0..250 {
+            t += 150;
+            assert_eq!(chop_safe(&mut sim, t), EV_ALIVE);
+        }
+        assert_eq!(t, 37_500);
+        assert!(sim.alive);
+        assert_eq!(sim.rejuvenations, 2);
+    }
+
+    #[test]
+    fn dead_window_entry_does_not_pin() {
+        // Reaching a window already past the deadline still kills: a
+        // fresh round idling from the start never survives to 15 s.
+        let mut sim = Sim::new(7);
+        assert_eq!(sim.advance_idle(16_000), EV_DIED_EXHAUSTION);
+        assert_eq!(sim.rejuvenations, 0);
     }
 }

@@ -55,4 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Sim core rewritten to legacy-bundle mechanics (pair-queue branches with
   magnitudes, shift-on-chop with odd-length replenish, stamina deadlines,
-  no score on lethal chops; wire v2). Character abilities not yet modeled.
+  no score on lethal chops; wire v2). Nima's rejuvenation cycle (20 s
+  period, stamina pinned full past 15 s) is modeled, including window
+  crossings on clock jumps; other heroes' abilities are still unmodeled
+  and their rounds replay-mismatch by design.
