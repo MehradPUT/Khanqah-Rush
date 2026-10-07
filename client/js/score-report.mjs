@@ -120,8 +120,17 @@ function hideBadge() {
 }
 
 async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
-	const signer = await loadSigner();
-	if (!signer?.setSessionKey(launch.key)) {
+	const fail = (stage) => {
+		window.__khanqah.lastReport = stage;
+		showBadge(`✗ ${stage}`, "#b91c1c");
+	};
+	const signer = await loadSigner().catch(() => null);
+	if (!signer) {
+		fail("signer-missing");
+		return;
+	}
+	if (!signer.setSessionKey(launch.key)) {
+		fail("session-key");
 		return;
 	}
 	const raw = packTrace({
@@ -131,15 +140,24 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		endTimeMs,
 	});
 	if (!raw) {
+		fail("pack-failed");
 		return;
 	}
-	const traceBytes = await deflateTrace(raw);
+	const traceBytes = await deflateTrace(raw).catch(() => null);
+	if (!traceBytes) {
+		fail("deflate-failed");
+		return;
+	}
 	const trace = btoa(
 		Array.from(traceBytes)
 			.map((b) => String.fromCharCode(b))
 			.join(""),
 	);
-	const traceHash = await sha256Hex(traceBytes);
+	const traceHash = await sha256Hex(traceBytes).catch(() => null);
+	if (!traceHash) {
+		fail("hash-failed");
+		return;
+	}
 	const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
 	const nonce = Array.from(nonceBytes)
 		.map((b) => b.toString(16).padStart(2, "0"))
@@ -154,11 +172,11 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		traceHash,
 	});
 	if (!tag) {
-		showBadge("✗ not recorded", "#b91c1c");
-		window.__khanqah.lastReport = "no-tag";
+		fail("no-tag");
 		return;
 	}
 	let recorded = false;
+	let netError = false;
 	try {
 		const res = await fetch("/api/setScore", {
 			method: "POST",
@@ -177,7 +195,11 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		});
 		recorded = !!(await res.json().catch(() => ({})))?.recorded;
 	} catch {
-		// Network failure counts as not recorded.
+		netError = true;
+	}
+	if (netError) {
+		fail("net-error");
+		return;
 	}
 	window.__khanqah.lastReport = recorded ? "saved" : "rejected";
 	showBadge(
