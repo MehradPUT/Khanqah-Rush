@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Legacy board endpoint (`POST /api/getHighScores` answers empty instead
+  of falling through to a 500) and favicon stub silencing console noise.
+
 - In-game save indicator: the companion shows ● REC during rounds and
   ✓ saved / ✗ not recorded after game over (the `recorded` flag the
   server returns; `window.__khanqah` exposes state for debugging).

@@ -291,6 +291,15 @@ describe("worker entry", () => {
 		}
 	});
 
+	it("answers the legacy board fetch with an empty board", async () => {
+		const res = await worker.fetch(
+			post("/api/getHighScores", { data: "legacy-session" }),
+			{ ...ENV },
+		);
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ ok: true, scores: [] });
+	});
+
 	it("serves health and falls through to assets", async () => {
 		const health = await worker.fetch(
 			new Request("https://game.test/healthz"),

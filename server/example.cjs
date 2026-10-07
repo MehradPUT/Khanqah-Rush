@@ -193,6 +193,11 @@ async function main() {
 				return deny("no-bot-token");
 			}
 
+			if (req.method === "POST" && req.url === "/api/getHighScores") {
+				await readJson(req).catch(() => ({}));
+				return json(res, 200, { ok: true, scores: [] });
+			}
+
 			return json(res, 404, { ok: false });
 		} catch (err) {
 			console.error(err);

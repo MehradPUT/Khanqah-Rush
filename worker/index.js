@@ -255,6 +255,14 @@ export default {
 		if (req.method === "POST" && url.pathname === "/api/setScore") {
 			return handleSetScore(req, env);
 		}
+		if (req.method === "POST" && url.pathname === "/api/getHighScores") {
+			// Legacy bundle board fetch. No per-chat board is tracked
+			// server-side (Telegram owns scoreboards; no KV by design), so
+			// answer empty instead of letting the request fall through to
+			// static assets (which 500s on POST).
+			await req.text().catch(() => "");
+			return json({ ok: true, scores: [] });
+		}
 		return env.ASSETS.fetch(req);
 	},
 };
