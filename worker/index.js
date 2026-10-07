@@ -175,9 +175,10 @@ async function handleSetScore(req, env) {
 	const body = await req.json().catch(() => ({}));
 	// Always 200 so probes learn nothing; the recorded flag (also visible
 	// on the public leaderboard anyway) tells the game what happened.
+	// TEMP-DEBUG: reason exposed until the first verified save; remove after.
 	const deny = (reason) => {
 		console.warn(`[worker] score rejected: ${reason}`);
-		return json({ ok: true, recorded: false });
+		return json({ ok: true, recorded: false, debugReason: reason });
 	};
 	const launch = await verifyLaunchToken(body.lt, serverSecret(env));
 	if (!launch) {

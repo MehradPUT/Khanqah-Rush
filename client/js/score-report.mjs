@@ -229,6 +229,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		let recorded = false;
 		let netError = false;
 		let httpStatus = 0;
+		let debugReason = null;
 		try {
 			dlog("report stage: post");
 			const res = await withTimeout(
@@ -251,7 +252,11 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 				"post",
 			);
 			httpStatus = res.status;
-			recorded = !!(await res.json().catch(() => ({})))?.recorded;
+			const body = await res.json().catch(() => ({}));
+			recorded = !!body?.recorded;
+			// TEMP-DEBUG: surface the server's reject reason until verified.
+			debugReason =
+				typeof body?.debugReason === "string" ? body.debugReason : null;
 		} catch (err) {
 			netError = true;
 			dlog("report POST error", {
@@ -264,15 +269,18 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 			endTimeMs,
 			httpStatus,
 			recorded,
+			debugReason,
 			netError,
 		});
 		if (netError) {
 			fail("net-error");
 			return;
 		}
-		window.__khanqah.lastReport = recorded ? "saved" : "rejected";
+		window.__khanqah.lastReport = recorded
+			? "saved"
+			: (debugReason ?? "rejected");
 		showBadge(
-			recorded ? "✓ score saved" : "✗ not recorded",
+			recorded ? "✓ score saved" : `✗ ${debugReason ?? "not recorded"}`,
 			recorded ? "#15803d" : "#b91c1c",
 		);
 	} catch (err) {
