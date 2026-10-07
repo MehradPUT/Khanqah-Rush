@@ -25,6 +25,29 @@ const POLL_MS = 500;
 const HEX_64 = /^[0-9a-f]{64}$/;
 const HEX_16 = /^[0-9a-f]{16}$/;
 
+// Temporary debug instrumentation (remove before merge): traces the
+// companion's view of round state so a playtest can report exactly
+// where reporting stalls. Never logs secrets (key/token/tag/trace).
+const DEBUG = true;
+
+function dlog(...args) {
+	try {
+		if (DEBUG) {
+			console.log("[khanqah-debug]", ...args);
+		}
+	} catch {
+		// Logging must never disturb the game.
+	}
+}
+
+function wrapClasses() {
+	try {
+		return document.getElementById("page_wrap")?.className ?? "<no page_wrap>";
+	} catch {
+		return "<unreadable>";
+	}
+}
+
 function readLaunch() {
 	const params = new URLSearchParams(window.location.search);
 	const launchToken = params.get("lt");
@@ -121,9 +144,22 @@ function hideBadge() {
 
 async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 	const fail = (stage, detail) => {
+		dlog("report failed", {
+			stage,
+			detail: detail ?? null,
+			score,
+			chops: chops.length,
+		});
 		window.__khanqah.lastReport = detail ? `${stage}: ${detail}` : stage;
 		showBadge(`✗ ${stage}`, "#b91c1c");
 	};
+	dlog("reportOnce start", {
+		score,
+		durationSec,
+		chops: chops.length,
+		endTimeMs,
+		classes: wrapClasses(),
+	});
 	try {
 		const signer = await loadSigner().catch(() => null);
 		if (!signer) {
@@ -178,6 +214,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		}
 		let recorded = false;
 		let netError = false;
+		let httpStatus = 0;
 		try {
 			const res = await fetch("/api/setScore", {
 				method: "POST",
@@ -194,10 +231,19 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 					traceHash,
 				}),
 			});
+			httpStatus = res.status;
 			recorded = !!(await res.json().catch(() => ({})))?.recorded;
 		} catch {
 			netError = true;
 		}
+		dlog("report POST done", {
+			score,
+			chops: chops.length,
+			endTimeMs,
+			httpStatus,
+			recorded,
+			netError,
+		});
 		if (netError) {
 			fail("net-error");
 			return;
@@ -219,13 +265,17 @@ function watch() {
 		recording: false,
 		lastReport: "none",
 		chops: 0,
+		lastPoll: null,
 	};
+	dlog("watch init", { hasLaunch: !!launch, classes: wrapClasses() });
 	if (!launch) {
 		return;
 	}
 	let roundStart = null;
 	let reported = false;
 	let chops = [];
+	let overLogged = false;
+	let skipLogged = false;
 	// Pre-round stream reset: capture-phase listeners run before the
 	// bundle's own handlers in the same user gesture, so the seeded stream
 	// restarts ahead of the round-init draws. Poll-based reset would come
@@ -251,8 +301,15 @@ function watch() {
 					// Stream already reset by the primer; never reset here.
 					roundStart = Date.now();
 					chops = [];
+					dlog("round start seen", { classes: wrapClasses() });
 				}
 			} else if (!inGame()) {
+				if (roundStart !== null) {
+					dlog("round cleared (left in_game)", {
+						classes: wrapClasses(),
+						chops: chops.length,
+					});
+				}
 				roundStart = null;
 				chops = [];
 			}
@@ -296,13 +353,36 @@ function watch() {
 	setInterval(() => {
 		try {
 			const score = currentScore();
-			if (inGame() && !gameOver()) {
+			const ig = inGame();
+			const over = gameOver();
+			window.__khanqah.lastPoll = {
+				inGame: ig,
+				gameOver: over,
+				score,
+				chops: chops.length,
+				roundActive: roundStart !== null,
+				reported,
+				classes: wrapClasses(),
+			};
+			if (ig && !over) {
 				syncRoundState();
 				reported = false;
+				overLogged = false;
+				skipLogged = false;
 				window.__khanqah.recording = true;
 				window.__khanqah.chops = chops.length;
 				showBadge("● REC", "#b45309", true);
 				return;
+			}
+			if (over && !overLogged) {
+				overLogged = true;
+				dlog("game over seen", {
+					score,
+					chops: chops.length,
+					roundActive: roundStart !== null,
+					reported,
+					classes: wrapClasses(),
+				});
 			}
 			window.__khanqah.recording = false;
 			if (score === 0) {
@@ -314,9 +394,18 @@ function watch() {
 				reported = true;
 				const endTimeMs = Date.now() - roundStart;
 				const durationSec = Math.max(1, Math.round(endTimeMs / 1000));
+				dlog("firing report", {
+					score,
+					durationSec,
+					chops: chops.length,
+					endTimeMs,
+				});
 				void reportOnce(launch, score, durationSec, chops, endTimeMs).catch(
 					() => {},
 				);
+			} else if (gameOver() && !reported && !skipLogged) {
+				skipLogged = true;
+				dlog("report skipped", { score, roundActive: roundStart !== null });
 			}
 		} catch {
 			// Observer must never disturb the game.
