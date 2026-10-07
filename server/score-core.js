@@ -7,7 +7,7 @@
  *
  * Canonical envelope v2 — must match client/js/signer-loader.mjs exactly:
  *   `khanqah-v2\n${sessionId}\n${score}\n${durationSec}\n${nonce}\n${timestamp}\n${traceHash}`
- * traceHash binds the (possibly absent during transition) compressed trace.
+ * traceHash binds the (possibly absent during transition) trace.
  */
 
 export const ENVELOPE_VERSION = "khanqah-v2";
@@ -347,8 +347,6 @@ export function buildSetGameScoreCall({
 // existing importers keep working.
 // ---------------------------------------------------------------------------
 import {
-	deflateTrace,
-	inflateTrace,
 	packTrace,
 	sha256Hex,
 	splitSeedHex,
@@ -361,8 +359,6 @@ import {
 } from "../shared/trace-codec.js";
 
 export {
-	deflateTrace,
-	inflateTrace,
 	packTrace,
 	sha256Hex,
 	splitSeedHex,
@@ -391,12 +387,11 @@ export async function replayTrace({
 	serverSecret,
 	sessionId,
 }) {
-	const comp = typeof traceB64 === "string" ? traceFromB64(traceB64) : null;
-	if (!comp || comp.length > TRACE_MAX_BYTES) {
+	const raw = typeof traceB64 === "string" ? traceFromB64(traceB64) : null;
+	if (!raw || raw.length > TRACE_MAX_BYTES) {
 		return { ok: false, reason: "bad-trace" };
 	}
-	const raw = await inflateTrace(comp);
-	const trace = raw && unpackTrace(raw);
+	const trace = unpackTrace(raw);
 	if (!trace) {
 		return { ok: false, reason: "bad-trace" };
 	}

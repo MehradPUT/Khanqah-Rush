@@ -59,3 +59,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   period, stamina pinned full past 15 s) is modeled, including window
   crossings on clock jumps; other heroes' abilities are still unmodeled
   and their rounds replay-mismatch by design.
+- Trace transport ships raw base64 (no `CompressionStream`): several
+  mobile browsers never resolve deflate, which silently killed every
+  report before it was built.
+
+### Fixed
+
+- Companion froze finished rounds for reporting instead of wiping them:
+  the bundle drops `in_game` and raises `in_result` in one synchronous
+  block, so the observer destroyed each trace before the poll could send
+  it and every score went unrecorded.

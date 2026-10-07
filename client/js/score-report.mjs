@@ -7,17 +7,18 @@
  *   carrying `in_game` (menu typing is never recorded),
  * - round state via `#page_wrap.in_result` plus `window.score` *reads*
  *   (trap-free; only *writes* trip the honeypot),
- * - trace packed binary + deflated (shared codec), hashed into a v2
+ * - trace packed binary (shared codec, raw + base64 — no CompressionStream:
+ *   several mobile browsers never resolve it), hashed into a v2
  *   envelope signed in WASM, POSTed same-origin on game over.
  *
  * Runs only with launch params (`lt`, `sid`, `sk`, `seed`) issued by the
  * bot server; otherwise the game stays local-only. Silent by design.
  */
 import {
-	deflateTrace,
 	packTrace,
 	sha256Hex,
 	splitSeedHex,
+	traceToB64,
 } from "../../shared/trace-codec.js";
 import { loadSigner } from "./signer-loader.mjs";
 
@@ -198,23 +199,9 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 			return;
 		}
 		dlog("report stage: packed", { bytes: raw.length });
-		const traceBytes = await withTimeout(
-			deflateTrace(raw).catch(() => null),
-			15000,
-			"deflate",
-		);
-		if (!traceBytes) {
-			fail("deflate-failed");
-			return;
-		}
-		dlog("report stage: deflated", { bytes: traceBytes.length });
-		const trace = btoa(
-			Array.from(traceBytes)
-				.map((b) => String.fromCharCode(b))
-				.join(""),
-		);
+		const trace = traceToB64(raw);
 		const traceHash = await withTimeout(
-			sha256Hex(traceBytes).catch(() => null),
+			sha256Hex(raw).catch(() => null),
 			15000,
 			"hash",
 		);

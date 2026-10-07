@@ -1,12 +1,16 @@
 /**
  * Trace codec shared by the page companion, the server core, and tests.
  * Single source — no copies. Runs on Node 18+, browsers, and Workers
- * (only Web-standard APIs: CompressionStream, atob/btoa, subtle crypto).
+ * (only Web-standard APIs: atob/btoa, subtle crypto).
+ *
+ * Traces ship RAW (no compression): typical rounds are under 100 bytes
+ * and even the 10k-chop cap fits a POST easily. CompressionStream is
+ * deliberately avoided — several mobile browsers never resolve it.
  *
  * Trace v1 binary layout (all integers little-endian):
  *   u8 version (1) || u32 seed_lo || u32 seed_hi || u16 chop count ||
  *   entries || u32 end_t_ms. Each entry is u32 t_ms + u8 side (0 LEFT,
- *   1 RIGHT). Transported deflated and base64-encoded.
+ *   1 RIGHT). Transported base64-encoded.
  */
 
 export const TRACE_VERSION = 1;
@@ -89,46 +93,6 @@ export function unpackTrace(raw) {
 		return null;
 	}
 	return { seedLo, seedHi, chops, endTimeMs };
-}
-
-async function streamToBytes(stream) {
-	const chunks = [];
-	const reader = stream.getReader();
-	for (;;) {
-		const { done, value } = await reader.read();
-		if (done) {
-			break;
-		}
-		chunks.push(value);
-	}
-	const total = chunks.reduce((n, c) => n + c.length, 0);
-	const out = new Uint8Array(total);
-	let o = 0;
-	for (const c of chunks) {
-		out.set(c, o);
-		o += c.length;
-	}
-	return out;
-}
-
-export async function deflateTrace(raw) {
-	const stream = new CompressionStream("deflate");
-	const writer = stream.writable.getWriter();
-	await writer.write(raw);
-	await writer.close();
-	return streamToBytes(stream.readable);
-}
-
-export async function inflateTrace(comp) {
-	try {
-		const stream = new DecompressionStream("deflate");
-		const writer = stream.writable.getWriter();
-		await writer.write(comp);
-		await writer.close();
-		return streamToBytes(stream.readable);
-	} catch {
-		return null;
-	}
 }
 
 function b64Encode(bytes) {

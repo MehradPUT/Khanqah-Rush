@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import {
-	deflateTrace,
 	deriveSessionKey,
 	packTrace,
 	replayTrace,
@@ -60,8 +59,7 @@ async function traceFields(seedHex) {
 		chops: [{ side: 0, t: 100 }],
 		endTimeMs: 200,
 	});
-	const comp = await deflateTrace(raw);
-	const bytes = Buffer.from(comp);
+	const bytes = Buffer.from(raw);
 	return {
 		trace: bytes.toString("base64"),
 		traceHash: createHash("sha256").update(bytes).digest("hex"),
@@ -86,8 +84,7 @@ async function submitReplayed({ lt, sid, key, seedHex }) {
 		chops.push({ side: i % 2 === 0 ? 0 : 1, t });
 	}
 	const raw = packTrace({ seedLo, seedHi, chops, endTimeMs: t });
-	const comp = await deflateTrace(raw);
-	const bytes = Buffer.from(comp);
+	const bytes = Buffer.from(raw);
 	const trace = bytes.toString("base64");
 	const traceHash = createHash("sha256").update(bytes).digest("hex");
 	const learned = await replayTrace({

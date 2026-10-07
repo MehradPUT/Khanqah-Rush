@@ -5,16 +5,15 @@ import {
 	checkPlausibility,
 	createMemoryNonceStore,
 	createSessionRegistry,
-	deflateTrace,
 	deriveSeed,
 	deriveSessionKey,
-	inflateTrace,
 	issueLaunchToken,
 	packTrace,
 	replayTrace,
 	sha256Hex,
 	timingSafeEqual,
 	traceFromB64,
+	traceToB64,
 	unpackTrace,
 	verifyEnvelope,
 	verifyLaunchToken,
@@ -35,7 +34,7 @@ async function validEnvelope(overrides = {}) {
 		chops: [{ side: 0, t: 100 }],
 		endTimeMs: 200,
 	});
-	const traceBytes = Buffer.from(await deflateTrace(raw));
+	const traceBytes = Buffer.from(raw);
 	const base = {
 		sessionId,
 		score: 250,
@@ -279,7 +278,7 @@ describe("misc", () => {
 });
 
 describe("trace codec", () => {
-	it("round-trips pack/deflate/inflate/unpack", async () => {
+	it("round-trips pack/base64/unpack over the raw transport", async () => {
 		const chops = [
 			{ side: 0, t: 200 },
 			{ side: 1, t: 450 },
@@ -287,9 +286,7 @@ describe("trace codec", () => {
 		];
 		const raw = packTrace({ seedLo: 42, seedHi: 0, chops, endTimeMs: 1200 });
 		expect(raw).not.toBeNull();
-		const comp = await deflateTrace(raw);
-		expect(comp.length).toBeLessThan(raw.length + 32);
-		const back = unpackTrace(await inflateTrace(comp));
+		const back = unpackTrace(traceFromB64(traceToB64(raw)));
 		expect(back).toEqual({ seedLo: 42, seedHi: 0, chops, endTimeMs: 1200 });
 	});
 
@@ -299,7 +296,6 @@ describe("trace codec", () => {
 				new Uint8Array([9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]),
 			),
 		).toBeNull();
-		expect(await inflateTrace(new Uint8Array([0, 1, 2, 3]))).toBeNull();
 		expect(traceFromB64("!!!not-base64!!!")).toBeNull();
 		expect(
 			packTrace({
@@ -366,8 +362,7 @@ describe("deterministic replay", () => {
 			chops,
 			endTimeMs: t,
 		});
-		const comp = await deflateTrace(raw);
-		return Buffer.from(comp).toString("base64");
+		return Buffer.from(raw).toString("base64");
 	}
 
 	function alternating(n) {
@@ -437,8 +432,7 @@ describe("deterministic replay", () => {
 		expect(chops.length).toBe(100);
 		const endTimeMs = t + 9000;
 		const raw = packTrace({ seedLo, seedHi, chops, endTimeMs });
-		const comp = await deflateTrace(raw);
-		const traceB64 = Buffer.from(comp).toString("base64");
+		const traceB64 = Buffer.from(raw).toString("base64");
 		const result = await replayTrace({
 			traceB64,
 			wasmBytes,
