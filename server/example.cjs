@@ -27,6 +27,21 @@ async function main() {
 		pathToFileURL(join(__dirname, "score-core.js")).href
 	);
 	const nonceStore = core.createMemoryNonceStore();
+	const sessions = core.createSessionRegistry();
+	const { readFile } = await import("node:fs/promises");
+	let simWasmBytes = null;
+	async function getSimWasm() {
+		if (!simWasmBytes) {
+			try {
+				simWasmBytes = await readFile(
+					join(__dirname, "..", "public", "wasm", "sim.wasm"),
+				);
+			} catch {
+				return null;
+			}
+		}
+		return simWasmBytes;
+	}
 
 	async function telegram(method, params) {
 		const res = await fetch(`${TELEGRAM_API}/${method}`, {
@@ -91,16 +106,19 @@ async function main() {
 					if (launchIds) {
 						// Mint a launch-bound session: token + session key travel in
 						// the answered URL (over TLS). Works for message and inline
-						// launches alike.
+						// launches alike. Rate-limited launches get the plain URL.
 						const sessionId = randomBytes(16).toString("hex");
-						const lt = await core.issueLaunchToken(launchIds, SERVER_SECRET);
-						const sk = Buffer.from(
-							await core.deriveSessionKey(SERVER_SECRET, sessionId),
-						).toString("hex");
-						const sep = GAME_URL.includes("?") ? "&" : "?";
-						url =
-							`${GAME_URL}${sep}lt=${encodeURIComponent(lt)}` +
-							`&sid=${sessionId}&sk=${sk}`;
+						if (sessions.register(userId, sessionId)) {
+							const lt = await core.issueLaunchToken(launchIds, SERVER_SECRET);
+							const sk = Buffer.from(
+								await core.deriveSessionKey(SERVER_SECRET, sessionId),
+							).toString("hex");
+							const seed = await core.deriveSeed(SERVER_SECRET, sessionId);
+							const sep = GAME_URL.includes("?") ? "&" : "?";
+							url =
+								`${GAME_URL}${sep}lt=${encodeURIComponent(lt)}` +
+								`&sid=${sessionId}&sk=${sk}&seed=${seed}`;
+						}
 					}
 					await telegram("answerCallbackQuery", {
 						callback_query_id: query.id,
@@ -117,6 +135,9 @@ async function main() {
 				if (!launch) {
 					return json(res, 200, { ok: true });
 				}
+				if (!sessions.isCurrent(launch.u, body.sid)) {
+					return json(res, 200, { ok: true });
+				}
 				const verified = await core.verifyEnvelope(
 					{
 						sessionId: body.sid,
@@ -125,6 +146,8 @@ async function main() {
 						nonce: body.nonce,
 						timestamp: body.timestamp,
 						tag: body.tag,
+						trace: body.trace,
+						traceHash: body.traceHash,
 					},
 					{ serverSecret: SERVER_SECRET, nonceStore },
 				);
@@ -136,6 +159,19 @@ async function main() {
 					durationSec: body.durationSec,
 				});
 				if (!plausible.ok) {
+					return json(res, 200, { ok: true });
+				}
+				const wasmBytes = await getSimWasm();
+				const replayed = wasmBytes
+					? await core.replayTrace({
+							traceB64: body.trace,
+							wasmBytes,
+							claimed: { score: body.score, alive: false },
+							serverSecret: SERVER_SECRET,
+							sessionId: body.sid,
+						})
+					: { ok: false, reason: "no-wasm" };
+				if (!replayed.ok) {
 					return json(res, 200, { ok: true });
 				}
 				if (BOT_TOKEN) {

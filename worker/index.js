@@ -12,13 +12,32 @@ import {
 	buildSetGameScoreCall,
 	checkPlausibility,
 	createMemoryNonceStore,
+	createSessionRegistry,
+	deriveSeed,
 	deriveSessionKey,
 	issueLaunchToken,
+	replayTrace,
 	verifyEnvelope,
 	verifyLaunchToken,
 } from "../server/score-core.js";
 
 const nonceStore = createMemoryNonceStore();
+const sessions = createSessionRegistry();
+
+// Artifact bytes, cached across requests in the isolate. Loaded through
+// the static-assets binding (same path as the game page uses) so no extra
+// network hop or configuration is needed.
+let simWasmBytes = null;
+async function getSimWasm(assetsFetch, origin) {
+	if (!simWasmBytes) {
+		const res = await assetsFetch(new Request(`${origin}/wasm/sim.wasm`));
+		if (!res.ok) {
+			return null;
+		}
+		simWasmBytes = new Uint8Array(await res.arrayBuffer());
+	}
+	return simWasmBytes;
+}
 
 function randomSessionId() {
 	const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -131,12 +150,16 @@ async function handleUpdate(update, req, env) {
 					: null);
 		if (launchIds) {
 			const sessionId = randomSessionId();
-			const lt = await issueLaunchToken(launchIds, serverSecret(env));
-			const sk = toHex(await deriveSessionKey(serverSecret(env), sessionId));
-			const sep = gameUrl.includes("?") ? "&" : "?";
-			url =
-				`${gameUrl}${sep}lt=${encodeURIComponent(lt)}` +
-				`&sid=${sessionId}&sk=${sk}`;
+			if (sessions.register(userId, sessionId)) {
+				const lt = await issueLaunchToken(launchIds, serverSecret(env));
+				const sk = toHex(await deriveSessionKey(serverSecret(env), sessionId));
+				const seed = await deriveSeed(serverSecret(env), sessionId);
+				const sep = gameUrl.includes("?") ? "&" : "?";
+				url =
+					`${gameUrl}${sep}lt=${encodeURIComponent(lt)}` +
+					`&sid=${sessionId}&sk=${sk}&seed=${seed}`;
+			}
+			// Rate-limited launches get the plain URL: playable, local-only.
 		}
 		if (env.TELEGRAM_BOT_TOKEN) {
 			await telegram(env, "answerCallbackQuery", {
@@ -155,6 +178,9 @@ async function handleSetScore(req, env) {
 	if (!launch) {
 		return json({ ok: true });
 	}
+	if (!sessions.isCurrent(launch.u, body.sid)) {
+		return json({ ok: true });
+	}
 	const verified = await verifyEnvelope(
 		{
 			sessionId: body.sid,
@@ -163,6 +189,8 @@ async function handleSetScore(req, env) {
 			nonce: body.nonce,
 			timestamp: body.timestamp,
 			tag: body.tag,
+			trace: body.trace,
+			traceHash: body.traceHash,
 		},
 		{ serverSecret: serverSecret(env), nonceStore },
 	);
@@ -174,6 +202,22 @@ async function handleSetScore(req, env) {
 		durationSec: body.durationSec,
 	});
 	if (!plausible.ok) {
+		return json({ ok: true });
+	}
+	const wasmBytes = await getSimWasm(env.ASSETS.fetch, new URL(req.url).origin);
+	const replayed = wasmBytes
+		? await replayTrace({
+				traceB64: body.trace,
+				wasmBytes,
+				claimed: {
+					score: body.score,
+					alive: false,
+				},
+				serverSecret: serverSecret(env),
+				sessionId: body.sid,
+			})
+		: { ok: false, reason: "no-wasm" };
+	if (!replayed.ok) {
 		return json({ ok: true });
 	}
 	if (env.TELEGRAM_BOT_TOKEN) {

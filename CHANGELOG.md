@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Server replay verification: traces replay through `sim.wasm` and must
+  match the claimed outcome; seeds are server-derived and seed-shopped
+  traces are rejected; single-active-session registry with issuance rate
+  limits. Companion records chop traces and posts v2 envelopes.
+
 - Signed score reporting for the legacy game via companion script
   (`public/js/score-report.mjs`, wired in `index.html`): observes game-over
   and posts WASM-signed envelopes with zero bundle surgery.

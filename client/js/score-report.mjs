@@ -3,29 +3,41 @@
  *
  * The minified bundle cannot be safely rewired, so this script observes
  * from the outside instead of patching the submitter:
- * - round state via `#page_wrap.in_result` (toggled by the bundle) and
- *   `window.score` *reads* (trap-free; only *writes* trip the honeypot),
- * - round duration measured from the first non-zero score,
- * - WASM-signed envelope POSTed same-origin on game over.
+ * - chop inputs via its own key/touch listeners, gated on `#page_wrap`
+ *   carrying `in_game` (menu typing is never recorded),
+ * - round state via `#page_wrap.in_result` plus `window.score` *reads*
+ *   (trap-free; only *writes* trip the honeypot),
+ * - trace packed binary + deflated (shared codec), hashed into a v2
+ *   envelope signed in WASM, POSTed same-origin on game over.
  *
- * Runs only with launch params (`lt`, `sid`, `sk`) issued by the bot
- * server; otherwise the game stays local-only. Silent by design.
+ * Runs only with launch params (`lt`, `sid`, `sk`, `seed`) issued by the
+ * bot server; otherwise the game stays local-only. Silent by design.
  */
+import {
+	deflateTrace,
+	packTrace,
+	sha256Hex,
+	splitSeedHex,
+} from "../../shared/trace-codec.js";
 import { loadSigner } from "./signer-loader.mjs";
 
 const POLL_MS = 500;
 const HEX_64 = /^[0-9a-f]{64}$/;
+const HEX_16 = /^[0-9a-f]{16}$/;
 
 function readLaunch() {
 	const params = new URLSearchParams(window.location.search);
 	const launchToken = params.get("lt");
 	const sessionId = params.get("sid");
 	const sessionKeyHex = params.get("sk");
+	const seedHex = params.get("seed");
 	if (
 		!launchToken ||
 		!sessionId ||
 		!sessionKeyHex ||
-		!HEX_64.test(sessionKeyHex)
+		!HEX_64.test(sessionKeyHex) ||
+		!seedHex ||
+		!HEX_16.test(seedHex)
 	) {
 		return null;
 	}
@@ -33,12 +45,22 @@ function readLaunch() {
 	for (let i = 0; i < 32; i++) {
 		key[i] = Number.parseInt(sessionKeyHex.slice(i * 2, i * 2 + 2), 16);
 	}
-	return { launchToken, sessionId, key };
+	const seed = splitSeedHex(seedHex);
+	if (!seed) {
+		return null;
+	}
+	return { launchToken, sessionId, key, seed };
 }
 
 function currentScore() {
 	const score = Number(window.score);
 	return Number.isInteger(score) && score > 0 ? score : 0;
+}
+
+function inGame() {
+	return (
+		document.getElementById("page_wrap")?.classList.contains("in_game") ?? false
+	);
 }
 
 function gameOver() {
@@ -48,11 +70,27 @@ function gameOver() {
 	);
 }
 
-async function reportOnce(launch, score, durationSec) {
+async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 	const signer = await loadSigner();
 	if (!signer?.setSessionKey(launch.key)) {
 		return;
 	}
+	const raw = packTrace({
+		seedLo: launch.seed.lo,
+		seedHi: launch.seed.hi,
+		chops,
+		endTimeMs,
+	});
+	if (!raw) {
+		return;
+	}
+	const traceBytes = await deflateTrace(raw);
+	const trace = btoa(
+		Array.from(traceBytes)
+			.map((b) => String.fromCharCode(b))
+			.join(""),
+	);
+	const traceHash = await sha256Hex(traceBytes);
 	const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
 	const nonce = Array.from(nonceBytes)
 		.map((b) => b.toString(16).padStart(2, "0"))
@@ -64,6 +102,7 @@ async function reportOnce(launch, score, durationSec) {
 		durationSec,
 		nonce,
 		timestamp,
+		traceHash,
 	});
 	if (!tag) {
 		return;
@@ -79,6 +118,8 @@ async function reportOnce(launch, score, durationSec) {
 			nonce,
 			timestamp,
 			tag,
+			trace,
+			traceHash,
 		}),
 	});
 }
@@ -90,26 +131,55 @@ function watch() {
 	}
 	let roundStart = null;
 	let reported = false;
+	let chops = [];
+	const record = (side) => {
+		try {
+			if (roundStart === null || !inGame() || gameOver()) {
+				return;
+			}
+			chops.push({ side, t: Date.now() - roundStart });
+		} catch {
+			// Observer must never disturb the game.
+		}
+	};
+	window.addEventListener("keydown", (e) => {
+		const code = e.code;
+		if (code === "ArrowLeft" || code === "KeyA" || code === "KeyH") {
+			record(0);
+		} else if (code === "ArrowRight" || code === "KeyD" || code === "KeyL") {
+			record(1);
+		}
+	});
+	for (const [id, side] of [
+		["button_left", 0],
+		["button_right", 1],
+	]) {
+		document
+			.getElementById(id)
+			?.addEventListener("pointerdown", () => record(side));
+	}
 	setInterval(() => {
 		try {
 			const score = currentScore();
-			if (score > 0 && roundStart === null) {
-				roundStart = Date.now();
-			}
-			if (score === 0) {
-				roundStart = null;
-			}
-			if (!gameOver()) {
+			if (inGame() && !gameOver()) {
+				if (roundStart === null) {
+					roundStart = Date.now();
+					chops = [];
+				}
 				reported = false;
 				return;
 			}
-			if (score > 0 && !reported && roundStart !== null) {
+			if (score === 0) {
+				roundStart = null;
+				chops = [];
+			}
+			if (score > 0 && gameOver() && !reported && roundStart !== null) {
 				reported = true;
-				const durationSec = Math.max(
-					1,
-					Math.round((Date.now() - roundStart) / 1000),
+				const endTimeMs = Date.now() - roundStart;
+				const durationSec = Math.max(1, Math.round(endTimeMs / 1000));
+				void reportOnce(launch, score, durationSec, chops, endTimeMs).catch(
+					() => {},
 				);
-				void reportOnce(launch, score, durationSec).catch(() => {});
 			}
 		} catch {
 			// Observer must never disturb the game.

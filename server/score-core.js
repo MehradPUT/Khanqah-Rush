@@ -5,11 +5,12 @@
  * module runs on Node 18+ and Cloudflare Workers with no dependencies.
  * Transport adapters (node:http example, future Worker entry) live outside.
  *
- * Canonical envelope — must match src/wasm/signer.ts exactly:
- *   `khanqah-v1\n${sessionId}\n${score}\n${durationSec}\n${nonce}\n${timestamp}`
+ * Canonical envelope v2 — must match client/js/signer-loader.mjs exactly:
+ *   `khanqah-v2\n${sessionId}\n${score}\n${durationSec}\n${nonce}\n${timestamp}\n${traceHash}`
+ * traceHash binds the (possibly absent during transition) compressed trace.
  */
 
-export const ENVELOPE_VERSION = "khanqah-v1";
+export const ENVELOPE_VERSION = "khanqah-v2";
 export const TIMESTAMP_WINDOW_SEC = 60;
 export const NONCE_TTL_SEC = 180;
 export const MAX_CPS = 10;
@@ -19,6 +20,12 @@ const textDecoder = new TextDecoder();
 
 function toBytes(str) {
 	return textEncoder.encode(str);
+}
+
+function toHex(bytes) {
+	return Array.from(bytes)
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
 }
 
 function fromHex(hex) {
@@ -164,12 +171,26 @@ export async function deriveSessionKey(serverSecret, sessionId) {
 	);
 }
 
+/**
+ * Derive the per-session sim seed (hex16) bound to the session id.
+ * Deterministic — the server recomputes it instead of storing it.
+ * Minted into the answered game URL next to sid/sk.
+ */
+export async function deriveSeed(serverSecret, sessionId) {
+	const full = await hmacSha256(
+		toBytes(serverSecret),
+		toBytes(`khanqah-seed\n${sessionId}`),
+	);
+	return toHex(full.slice(0, 8));
+}
+
 export function canonicalEnvelope({
 	sessionId,
 	score,
 	durationSec,
 	nonce,
 	timestamp,
+	traceHash,
 }) {
 	return toBytes(
 		[
@@ -179,6 +200,7 @@ export function canonicalEnvelope({
 			String(durationSec),
 			nonce,
 			String(timestamp),
+			traceHash,
 		].join("\n"),
 	);
 }
@@ -204,8 +226,8 @@ export function createMemoryNonceStore() {
 
 /**
  * Verify a score envelope. Returns { ok: true } or { ok: false, reason }.
- * Reasons: bad-shape | stale | replay | bad-signature. Reasons stay
- * server-side — the transport must answer 200 either way.
+ * Reasons: bad-shape | stale | replay | bad-signature | bad-trace.
+ * Reasons stay server-side — the transport must answer 200 either way.
  */
 export async function verifyEnvelope(
 	envelope,
@@ -216,8 +238,16 @@ export async function verifyEnvelope(
 		atSec = nowSec(),
 	},
 ) {
-	const { sessionId, score, durationSec, nonce, timestamp, tag } =
-		envelope ?? {};
+	const {
+		sessionId,
+		score,
+		durationSec,
+		nonce,
+		timestamp,
+		tag,
+		trace,
+		traceHash,
+	} = envelope ?? {};
 	if (
 		typeof sessionId !== "string" ||
 		sessionId.length === 0 ||
@@ -228,7 +258,10 @@ export async function verifyEnvelope(
 		typeof nonce !== "string" ||
 		!/^[0-9a-f]{32}$/.test(nonce) ||
 		!Number.isInteger(timestamp) ||
-		typeof tag !== "string"
+		typeof tag !== "string" ||
+		typeof trace !== "string" ||
+		typeof traceHash !== "string" ||
+		!/^[0-9a-f]{64}$/.test(traceHash)
 	) {
 		return { ok: false, reason: "bad-shape" };
 	}
@@ -238,10 +271,27 @@ export async function verifyEnvelope(
 	if (!nonceStore.checkAndAdd(nonce)) {
 		return { ok: false, reason: "replay" };
 	}
+	const traceBytes = traceFromB64(trace);
+	if (!traceBytes || traceBytes.length > TRACE_MAX_BYTES) {
+		return { ok: false, reason: "bad-trace" };
+	}
+	const actualHash = toHex(
+		new Uint8Array(await crypto.subtle.digest("SHA-256", traceBytes)),
+	);
+	if (actualHash !== traceHash.toLowerCase()) {
+		return { ok: false, reason: "bad-trace" };
+	}
 	const sessionKey = await deriveSessionKey(serverSecret, sessionId);
 	const expected = await hmacSha256(
 		sessionKey,
-		canonicalEnvelope({ sessionId, score, durationSec, nonce, timestamp }),
+		canonicalEnvelope({
+			sessionId,
+			score,
+			durationSec,
+			nonce,
+			timestamp,
+			traceHash,
+		}),
 	);
 	const got = fromHex(tag);
 	if (!got || !timingSafeEqual(got, expected)) {
@@ -288,5 +338,147 @@ export function buildSetGameScoreCall({
 	return {
 		method: "setGameScore",
 		params: { user_id: userId, chat_id: chatId, message_id: messageId, score },
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Trace codec lives in shared/trace-codec.js (single source for page,
+// server, and tests). Imported for internal use and re-exported so
+// existing importers keep working.
+// ---------------------------------------------------------------------------
+import {
+	deflateTrace,
+	inflateTrace,
+	packTrace,
+	sha256Hex,
+	splitSeedHex,
+	TRACE_MAX_BYTES,
+	TRACE_MAX_CHOPS,
+	TRACE_VERSION,
+	traceFromB64,
+	traceToB64,
+	unpackTrace,
+} from "../shared/trace-codec.js";
+
+export {
+	deflateTrace,
+	inflateTrace,
+	packTrace,
+	sha256Hex,
+	splitSeedHex,
+	TRACE_MAX_BYTES,
+	TRACE_MAX_CHOPS,
+	TRACE_VERSION,
+	traceFromB64,
+	traceToB64,
+	unpackTrace,
+};
+
+/**
+ * Replay a trace through the deterministic sim and compare with the claim.
+ * The seed is re-derived from (serverSecret, sessionId) and must match the
+ * trace-embedded seed — clients cannot shop for favorable seeds.
+ * wasmBytes: Uint8Array of the sim.wasm module bytes (caller reads from
+ * disk on node, self-fetches on Workers; the compiled module is cached by
+ * the caller if replays are frequent).
+ * Returns { ok: true, replayed } or { ok: false, reason }.
+ * Reasons: bad-trace | bad-seed | no-outcome-match.
+ */
+export async function replayTrace({
+	traceB64,
+	wasmBytes,
+	claimed,
+	serverSecret,
+	sessionId,
+}) {
+	const comp = typeof traceB64 === "string" ? traceFromB64(traceB64) : null;
+	if (!comp || comp.length > TRACE_MAX_BYTES) {
+		return { ok: false, reason: "bad-trace" };
+	}
+	const raw = await inflateTrace(comp);
+	const trace = raw && unpackTrace(raw);
+	if (!trace) {
+		return { ok: false, reason: "bad-trace" };
+	}
+	const seedHex = await deriveSeed(serverSecret, sessionId);
+	const seedBytes = fromHex(seedHex);
+	const seedView = new DataView(seedBytes.buffer);
+	if (
+		seedView.getUint32(0, true) !== trace.seedLo >>> 0 ||
+		seedView.getUint32(4, true) !== trace.seedHi >>> 0
+	) {
+		return { ok: false, reason: "bad-seed" };
+	}
+	let instance;
+	try {
+		({ instance } = await WebAssembly.instantiate(wasmBytes));
+	} catch {
+		return { ok: false, reason: "bad-trace" };
+	}
+	const sim = instance.exports;
+	if (typeof sim.sim_version !== "function" || sim.sim_version() !== 2) {
+		return { ok: false, reason: "bad-trace" };
+	}
+	const seed = (BigInt(trace.seedHi >>> 0) << 32n) | BigInt(trace.seedLo >>> 0);
+	sim.sim_reset(Number(seed & 0xffffffffn), Number(seed >> 32n));
+	for (const chop of trace.chops) {
+		// sim sides: 1 = LEFT, 2 = RIGHT; trace sides: 0 = LEFT, 1 = RIGHT.
+		const ev = sim.sim_chop(chop.side === 0 ? 1 : 2, chop.t);
+		if (ev !== 0) {
+			break;
+		}
+	}
+	sim.sim_advance_idle(trace.endTimeMs);
+	const replayed = {
+		score: sim.sim_score(),
+		alive: sim.sim_alive() === 1,
+		deathBranch: sim.sim_death_reason() === 1,
+		survivalMs: Number(sim.sim_survival_ms()),
+	};
+	const match =
+		replayed.score === claimed.score && replayed.alive === claimed.alive;
+	if (!match) {
+		return { ok: false, reason: "no-outcome-match", replayed };
+	}
+	return { ok: true, replayed };
+}
+
+/**
+ * Single-active-session registry with issuance rate limiting.
+ * Sessions die with their launch tokens (TTL); a new launch for the same
+ * user replaces the old one, so grinding many seeds in parallel is
+ * pointless — only the latest session verifies. In-memory: single isolate
+ * only, like the nonce store.
+ */
+export function createSessionRegistry({
+	maxLaunchesPerHour = 30,
+	sessionTtlSec = 3600,
+} = {}) {
+	// userId -> { sessionId, issuedAt, launches: [atSec...] }
+	const users = new Map();
+	return {
+		register(userId, sessionId, atSec = nowSec()) {
+			let entry = users.get(userId);
+			if (!entry) {
+				entry = { launches: [] };
+				users.set(userId, entry);
+			}
+			entry.launches = entry.launches.filter((t) => t > atSec - 3600);
+			if (entry.launches.length >= maxLaunchesPerHour) {
+				return false;
+			}
+			entry.launches.push(atSec);
+			entry.sessionId = sessionId;
+			entry.issuedAt = atSec;
+			return true;
+		},
+		isCurrent(userId, sessionId, atSec = nowSec()) {
+			const entry = users.get(userId);
+			return (
+				!!entry &&
+				entry.sessionId === sessionId &&
+				atSec - entry.issuedAt < sessionTtlSec
+			);
+		},
 	};
 }

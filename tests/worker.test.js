@@ -1,7 +1,26 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
-import { deriveSessionKey } from "../server/score-core.js";
+import {
+	deflateTrace,
+	deriveSessionKey,
+	packTrace,
+	replayTrace,
+	splitSeedHex,
+} from "../server/score-core.js";
 import worker from "../worker/index.js";
+
+let simWasmBytes = null;
+async function wasmBytesOrNull() {
+	if (!simWasmBytes) {
+		if (!existsSync("public/wasm/sim.wasm")) {
+			return null;
+		}
+		simWasmBytes = await readFile("public/wasm/sim.wasm");
+	}
+	return simWasmBytes;
+}
 
 const ENV = {
 	TELEGRAM_BOT_TOKEN: "test-token",
@@ -9,7 +28,20 @@ const ENV = {
 	GAME_SHORT_NAME: "khanqah_rush",
 	GAME_URL: "https://game.test",
 	WEBHOOK_SECRET: "wh-secret",
-	ASSETS: { fetch: async () => new Response("assets", { status: 200 }) },
+	ASSETS: {
+		fetch: async (req) => {
+			const url = new URL(req.url);
+			if (url.pathname === "/wasm/sim.wasm") {
+				const bytes = await wasmBytesOrNull();
+				if (bytes) {
+					return new Response(bytes, {
+						headers: { "Content-Type": "application/wasm" },
+					});
+				}
+			}
+			return new Response("assets", { status: 200 });
+		},
+	},
 };
 
 function post(path, body, headers = {}) {
@@ -18,6 +50,119 @@ function post(path, body, headers = {}) {
 		headers: { "Content-Type": "application/json", ...headers },
 		body: JSON.stringify(body),
 	});
+}
+
+async function traceFields(seedHex) {
+	const { seedLo, seedHi } = splitSeedHex(seedHex);
+	const raw = packTrace({
+		seedLo,
+		seedHi,
+		chops: [{ side: 0, t: 100 }],
+		endTimeMs: 200,
+	});
+	const comp = await deflateTrace(raw);
+	const bytes = Buffer.from(comp);
+	return {
+		trace: bytes.toString("base64"),
+		traceHash: createHash("sha256").update(bytes).digest("hex"),
+	};
+}
+
+/**
+ * Play a fixed alternating script against the session seed, learn the
+ * replayed outcome locally, then submit it. Returns the worker response
+ * plus what a correct server must write. Skips (null) without artifacts.
+ */
+async function submitReplayed({ lt, sid, key, seedHex }) {
+	const wasmBytes = await wasmBytesOrNull();
+	if (!wasmBytes) {
+		return null;
+	}
+	const { seedLo, seedHi } = splitSeedHex(seedHex);
+	const chops = [];
+	let t = 0;
+	for (let i = 0; i < 60; i++) {
+		t += 200;
+		chops.push({ side: i % 2 === 0 ? 0 : 1, t });
+	}
+	const raw = packTrace({ seedLo, seedHi, chops, endTimeMs: t });
+	const comp = await deflateTrace(raw);
+	const bytes = Buffer.from(comp);
+	const trace = bytes.toString("base64");
+	const traceHash = createHash("sha256").update(bytes).digest("hex");
+	const learned = await replayTrace({
+		traceB64: trace,
+		wasmBytes,
+		claimed: { score: -1, alive: true },
+		serverSecret: "test-secret",
+		sessionId: sid,
+	});
+	if (learned.ok || !learned.replayed) {
+		throw new Error("expected a mismatch probe to reveal the outcome");
+	}
+	const { score, survivalMs } = learned.replayed;
+	// Duration derived from the trace itself so plausibility is
+	// structurally consistent (score <= chops <= ceil(duration * rate)).
+	const durationSec = Math.max(1, Math.ceil(survivalMs / 1000));
+	const nonce = randomBytes(16).toString("hex");
+	const timestamp = Math.floor(Date.now() / 1000);
+	const canonical = [
+		"khanqah-v2",
+		sid,
+		String(score),
+		String(durationSec),
+		nonce,
+		String(timestamp),
+		traceHash,
+	].join("\n");
+	const tag = createHmac("sha256", Buffer.from(key))
+		.update(canonical)
+		.digest("hex");
+	const response = await worker.fetch(
+		post("/api/setScore", {
+			lt,
+			sid,
+			score,
+			durationSec,
+			nonce,
+			timestamp,
+			tag,
+			trace,
+			traceHash,
+		}),
+		{ ...ENV },
+	);
+	return { response, score };
+}
+
+async function signedBody({ lt, sid, key, score, durationSec, seedHex }) {
+	const { randomBytes } = await import("node:crypto");
+	const nonce = randomBytes(16).toString("hex");
+	const timestamp = Math.floor(Date.now() / 1000);
+	const { trace, traceHash } = await traceFields(seedHex);
+	const canonical = [
+		"khanqah-v2",
+		sid,
+		String(score),
+		String(durationSec),
+		nonce,
+		String(timestamp),
+		traceHash,
+	].join("\n");
+	const tag = createHmac("sha256", Buffer.from(key))
+		.update(canonical)
+		.digest("hex");
+	return {
+		lt,
+		sid,
+		score,
+		durationSec,
+		nonce,
+		timestamp,
+		tag,
+		trace,
+		traceHash,
+	};
 }
 
 async function launchViaWebhook(telegramMock) {
@@ -46,6 +191,7 @@ async function launchViaWebhook(telegramMock) {
 		lt: url.searchParams.get("lt"),
 		sid: url.searchParams.get("sid"),
 		sk: url.searchParams.get("sk"),
+		seed: url.searchParams.get("seed"),
 	};
 }
 
@@ -170,41 +316,16 @@ describe("worker entry", () => {
 		);
 		vi.stubGlobal("fetch", telegramMock);
 		try {
-			const { lt, sid, sk } = await launchViaWebhook(telegramMock);
-			expect(lt && sid && sk).toBeTruthy();
+			const { lt, sid, sk, seed } = await launchViaWebhook(telegramMock);
+			expect(lt && sid && sk && seed).toBeTruthy();
 
 			const key = await deriveSessionKey("test-secret", sid);
-			const { randomBytes } = await import("node:crypto");
-			async function submit(score, nonceHex) {
-				const timestamp = Math.floor(Date.now() / 1000);
-				const canonical = [
-					"khanqah-v1",
-					sid,
-					String(score),
-					"30",
-					nonceHex,
-					String(timestamp),
-				].join("\n");
-				const tag = createHmac("sha256", Buffer.from(key))
-					.update(canonical)
-					.digest("hex");
-				return worker.fetch(
-					post("/api/setScore", {
-						lt,
-						sid,
-						score,
-						durationSec: 30,
-						nonce: nonceHex,
-						timestamp,
-						tag,
-					}),
-					{ ...ENV },
-				);
-			}
-
 			const callsBefore = telegramMock.mock.calls.length;
-			const okRes = await submit(120, randomBytes(16).toString("hex"));
-			expect(okRes.status).toBe(200);
+			const played = await submitReplayed({ lt, sid, key, seedHex: seed });
+			if (!played) {
+				return;
+			}
+			expect(played.response.status).toBe(200);
 			const scoreCalls = telegramMock.mock.calls.filter(([url]) =>
 				url.endsWith("/setGameScore"),
 			);
@@ -213,11 +334,22 @@ describe("worker entry", () => {
 				user_id: 7,
 				chat_id: 8,
 				message_id: 9,
-				score: 120,
+				score: played.score,
 			});
 
-			// Tampered score: still HTTP 200 (silent), but no Telegram write.
-			const bad = await submit(99999, randomBytes(16).toString("hex"));
+			// Inflated claim on a valid session: still HTTP 200 (silent),
+			// but no Telegram write.
+			const badBody = await signedBody({
+				lt,
+				sid,
+				key,
+				score: played.score + 1000,
+				durationSec: 30,
+				seedHex: seed,
+			});
+			const bad = await worker.fetch(post("/api/setScore", badBody), {
+				...ENV,
+			});
 			expect(bad.status).toBe(200);
 			expect(
 				telegramMock.mock.calls.filter(([url]) => url.endsWith("/setGameScore"))
@@ -259,36 +391,15 @@ describe("worker entry", () => {
 			const lt = url.searchParams.get("lt");
 			const sid = url.searchParams.get("sid");
 			const sk = url.searchParams.get("sk");
-			expect(lt && sid && sk).toBeTruthy();
+			const seed = url.searchParams.get("seed");
+			expect(lt && sid && sk && seed).toBeTruthy();
 
 			const key = await deriveSessionKey("test-secret", sid);
-			const { randomBytes } = await import("node:crypto");
-			const nonce = randomBytes(16).toString("hex");
-			const timestamp = Math.floor(Date.now() / 1000);
-			const canonical = [
-				"khanqah-v1",
-				sid,
-				"60",
-				"20",
-				nonce,
-				String(timestamp),
-			].join("\n");
-			const tag = createHmac("sha256", Buffer.from(key))
-				.update(canonical)
-				.digest("hex");
-			const posted = await worker.fetch(
-				post("/api/setScore", {
-					lt,
-					sid,
-					score: 60,
-					durationSec: 20,
-					nonce,
-					timestamp,
-					tag,
-				}),
-				{ ...ENV },
-			);
-			expect(posted.status).toBe(200);
+			const played = await submitReplayed({ lt, sid, key, seedHex: seed });
+			if (!played) {
+				return;
+			}
+			expect(played.response.status).toBe(200);
 			const scoreCalls = telegramMock.mock.calls.filter(([url]) =>
 				url.endsWith("/setGameScore"),
 			);
@@ -296,7 +407,7 @@ describe("worker entry", () => {
 			expect(JSON.parse(scoreCalls[0][1].body)).toMatchObject({
 				user_id: 7,
 				inline_message_id: "AAQAAxkBAAI",
-				score: 60,
+				score: played.score,
 			});
 		} finally {
 			vi.unstubAllGlobals();
