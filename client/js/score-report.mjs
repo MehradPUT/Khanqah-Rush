@@ -48,6 +48,17 @@ function wrapClasses() {
 	}
 }
 
+// Reject if a stage stalls (mobile browsers can suspend work when the
+// tab loses focus); turns silent hangs into visible stage failures.
+function withTimeout(promise, ms, label) {
+	return Promise.race([
+		promise,
+		new Promise((_, reject) => {
+			setTimeout(() => reject(new Error(`timeout:${label}`)), ms);
+		}),
+	]);
+}
+
 function readLaunch() {
 	const params = new URLSearchParams(window.location.search);
 	const launchToken = params.get("lt");
@@ -161,7 +172,13 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		classes: wrapClasses(),
 	});
 	try {
-		const signer = await loadSigner().catch(() => null);
+		dlog("report stage: load-signer");
+		const signer = await withTimeout(
+			loadSigner().catch(() => null),
+			15000,
+			"load-signer",
+		);
+		dlog("report stage: signer ready", { ok: !!signer });
 		if (!signer) {
 			fail("signer-missing");
 			return;
@@ -180,17 +197,27 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 			fail("pack-failed");
 			return;
 		}
-		const traceBytes = await deflateTrace(raw).catch(() => null);
+		dlog("report stage: packed", { bytes: raw.length });
+		const traceBytes = await withTimeout(
+			deflateTrace(raw).catch(() => null),
+			15000,
+			"deflate",
+		);
 		if (!traceBytes) {
 			fail("deflate-failed");
 			return;
 		}
+		dlog("report stage: deflated", { bytes: traceBytes.length });
 		const trace = btoa(
 			Array.from(traceBytes)
 				.map((b) => String.fromCharCode(b))
 				.join(""),
 		);
-		const traceHash = await sha256Hex(traceBytes).catch(() => null);
+		const traceHash = await withTimeout(
+			sha256Hex(traceBytes).catch(() => null),
+			15000,
+			"hash",
+		);
 		if (!traceHash) {
 			fail("hash-failed");
 			return;
@@ -216,25 +243,33 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		let netError = false;
 		let httpStatus = 0;
 		try {
-			const res = await fetch("/api/setScore", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					lt: launch.launchToken,
-					sid: launch.sessionId,
-					score,
-					durationSec,
-					nonce,
-					timestamp,
-					tag,
-					trace,
-					traceHash,
+			dlog("report stage: post");
+			const res = await withTimeout(
+				fetch("/api/setScore", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						lt: launch.launchToken,
+						sid: launch.sessionId,
+						score,
+						durationSec,
+						nonce,
+						timestamp,
+						tag,
+						trace,
+						traceHash,
+					}),
 				}),
-			});
+				20000,
+				"post",
+			);
 			httpStatus = res.status;
 			recorded = !!(await res.json().catch(() => ({})))?.recorded;
-		} catch {
+		} catch (err) {
 			netError = true;
+			dlog("report POST error", {
+				message: err instanceof Error ? err.message : String(err),
+			});
 		}
 		dlog("report POST done", {
 			score,
