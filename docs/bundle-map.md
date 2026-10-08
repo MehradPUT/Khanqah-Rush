@@ -105,6 +105,10 @@ Rust sims replicate the exact op order).
 - Death only via the rAF loop (`Va()` on deadline, chop-time checks
   excluded) or branch chops; the 400 ms `setTimeout(rb,400)` delays
   `in_result`.
+- `Ca` falls through into the per-hero blocks even after `Va()` death:
+  Amirhossein scores +1 and Erfan can score +2 on the killing chop;
+  counters advance too. Exhaustion deaths (frame-loop `Va`, no `Ca`)
+  score nothing.
 
 ## Stamina and Nima rejuvenation (sim-critical)
 

@@ -332,6 +332,46 @@ impl Sim {
         }
     }
 
+    /// Per-hero progress that runs on EVERY chop reaching Ca's tail —
+    /// including lethal ones (the bundle falls through into the per-hero
+    /// blocks after `Va()`). Scoring here is on top of the base chop:
+    /// Amirhossein +1 and Erfan clutch +2 apply even on death chops.
+    fn hero_progress(&mut self, t_ms: u32) {
+        match self.hero {
+            HERO_FARGOL if !self.flame_active_at(t_ms) => {
+                self.hero_chops += 1;
+                if self.hero_chops > 0 && self.hero_chops % FARGOL_FLAME_EVERY == 0 {
+                    self.flame_start_ms = Some(t_ms);
+                }
+            }
+            HERO_ALI if !self.flurry_active => {
+                self.hero_chops += 1;
+                if self.hero_chops > 0 && self.hero_chops % ALI_FLURRY_EVERY == 0 {
+                    self.flurry_active = true;
+                    self.flurry_remaining = FLURRY_COUNT;
+                    self.flurry_next_at_ms = t_ms.saturating_add(FLURRY_STEP_MS);
+                    self.pin_full(t_ms);
+                    self.player_left = self.ali_safe_side();
+                }
+            }
+            HERO_AMIRHOSSEIN => {
+                self.score_point();
+            }
+            HERO_ERFAN => {
+                if (self.deadline_ms - t_ms as f64) / self.qa_ms < 0.5 {
+                    self.score_bonus2();
+                }
+            }
+            HERO_AHMAD => {
+                self.hero_chops += 1;
+                if self.hero_chops > 0 && self.hero_chops % AHMAD_SHIELD_EVERY == 0 {
+                    self.shields += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Sacrifice impact + Ahmad exhaustion cleanup share the pattern;
     /// applied once when the clock crosses the impact time.
     fn maybe_impact(&mut self, t_ms: u32) {
@@ -562,10 +602,13 @@ impl Sim {
                 self.sacrifice_impact_at_ms =
                     Some(t_ms.saturating_add(SACRIFICE_IMPACT_MS));
                 self.sacrifice_impact_left = self.player_left;
+                self.hero_progress(t_ms);
                 return EV_ALIVE;
             }
             self.alive = false;
             self.death_branch = true;
+            // Falls through into the per-hero blocks even on death.
+            self.hero_progress(t_ms);
             return EV_DIED_BRANCH;
         }
         // Survived chop: exactly one shift, then refill BEFORE scoring —
@@ -574,40 +617,7 @@ impl Sim {
         self.shift_entry();
         self.refill(t_ms);
         self.score_point();
-        match self.hero {
-            HERO_FARGOL if !self.flame_active_at(t_ms) => {
-                self.hero_chops += 1;
-                if self.hero_chops > 0 && self.hero_chops % FARGOL_FLAME_EVERY == 0 {
-                    self.flame_start_ms = Some(t_ms);
-                    self.pin_full(t_ms);
-                }
-            }
-            HERO_ALI if !self.flurry_active => {
-                self.hero_chops += 1;
-                if self.hero_chops > 0 && self.hero_chops % ALI_FLURRY_EVERY == 0 {
-                    self.flurry_active = true;
-                    self.flurry_remaining = FLURRY_COUNT;
-                    self.flurry_next_at_ms = t_ms.saturating_add(FLURRY_STEP_MS);
-                    self.pin_full(t_ms);
-                    self.player_left = self.ali_safe_side();
-                }
-            }
-            HERO_AMIRHOSSEIN => {
-                self.score_point();
-            }
-            HERO_ERFAN => {
-                if (self.deadline_ms - t_ms as f64) / self.qa_ms < 0.5 {
-                    self.score_bonus2();
-                }
-            }
-            HERO_AHMAD => {
-                self.hero_chops += 1;
-                if self.hero_chops > 0 && self.hero_chops % AHMAD_SHIELD_EVERY == 0 {
-                    self.shields += 1;
-                }
-            }
-            _ => {}
-        }
+        self.hero_progress(t_ms);
         EV_ALIVE
     }
 
@@ -1102,6 +1112,31 @@ mod tests {
         assert_eq!(sim.advance_idle(4400), EV_ALIVE);
         assert_eq!(chop_safe(&mut sim, 4400), EV_ALIVE);
         assert_eq!(sim.score, 4);
+    }
+
+    #[test]
+    fn amirhossein_scores_on_death_chop() {
+        // The per-hero block runs even after Va(): a lethal chop still
+        // pays the multiplier point.
+        let mut sim = Sim::new(7);
+        sim.hero = HERO_AMIRHOSSEIN;
+        assert_eq!(sim.chop(SIDE_LEFT, 100), EV_ALIVE);
+        assert_eq!(sim.score, 2);
+        sim.queue[0] = -1;
+        assert_eq!(sim.chop(SIDE_LEFT, 200), EV_DIED_BRANCH);
+        assert_eq!(sim.score, 3);
+    }
+
+    #[test]
+    fn erfan_clutch_scores_on_death_chop() {
+        let mut sim = Sim::new(7);
+        sim.hero = HERO_ERFAN;
+        assert_eq!(sim.chop(SIDE_LEFT, 100), EV_ALIVE);
+        assert_eq!(sim.score, 1);
+        sim.queue[0] = -1;
+        sim.deadline_ms = 300.0;
+        assert_eq!(sim.chop(SIDE_LEFT, 200), EV_DIED_BRANCH);
+        assert_eq!(sim.score, 3);
     }
 
     #[test]

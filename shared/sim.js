@@ -274,6 +274,53 @@ export class Sim {
 		}
 	}
 
+	/**
+	 * Per-hero progress that runs on EVERY chop reaching Ca's tail —
+	 * including lethal ones (the bundle falls through into the per-hero
+	 * blocks after Va()). Scoring here is on top of the base chop:
+	 * Amirhossein +1 and Erfan clutch +2 apply even on death chops.
+	 */
+	heroProgress(tMs) {
+		switch (this.hero) {
+			case HERO_FARGOL:
+				if (!this.flameActiveAt(tMs)) {
+					this.heroChops += 1;
+					if (this.heroChops > 0 && this.heroChops % FARGOL_FLAME_EVERY === 0) {
+						this.flameStartMs = tMs;
+					}
+				}
+				break;
+			case HERO_ALI:
+				if (!this.flurryActive) {
+					this.heroChops += 1;
+					if (this.heroChops > 0 && this.heroChops % ALI_FLURRY_EVERY === 0) {
+						this.flurryActive = true;
+						this.flurryRemaining = FLURRY_COUNT;
+						this.flurryNextAtMs = satAdd(tMs, FLURRY_STEP_MS);
+						this.pinFull(tMs);
+						this.playerLeft = this.aliSafeSide();
+					}
+				}
+				break;
+			case HERO_AMIRHOSSEIN:
+				this.scorePoint();
+				break;
+			case HERO_ERFAN:
+				if ((this.deadlineMs - tMs) / this.qaMs < 0.5) {
+					this.scoreBonus2();
+				}
+				break;
+			case HERO_AHMAD:
+				this.heroChops += 1;
+				if (this.heroChops > 0 && this.heroChops % AHMAD_SHIELD_EVERY === 0) {
+					this.shields += 1;
+				}
+				break;
+			default:
+				break;
+		}
+	}
+
 	/** Sacrifice impact: applied once when the clock crosses it. */
 	maybeImpact(tMs) {
 		if (this.sacrificeImpactAtMs !== null && this.sacrificeImpactAtMs <= tMs) {
@@ -490,10 +537,13 @@ export class Sim {
 				this.sacrificeIgnoreUntilMs = satAdd(tMs, SACRIFICE_MS);
 				this.sacrificeImpactAtMs = satAdd(tMs, SACRIFICE_IMPACT_MS);
 				this.sacrificeImpactLeft = this.playerLeft;
+				this.heroProgress(tMs);
 				return EV_ALIVE;
 			}
 			this.alive = false;
 			this.deathBranch = true;
+			// Falls through into the per-hero blocks even on death.
+			this.heroProgress(tMs);
 			return EV_DIED_BRANCH;
 		}
 		// Survived chop: exactly one shift, refill before scoring —
@@ -502,45 +552,7 @@ export class Sim {
 		this.shiftEntry();
 		this.refill(tMs);
 		this.scorePoint();
-		switch (this.hero) {
-			case HERO_FARGOL:
-				if (!this.flameActiveAt(tMs)) {
-					this.heroChops += 1;
-					if (this.heroChops > 0 && this.heroChops % FARGOL_FLAME_EVERY === 0) {
-						this.flameStartMs = tMs;
-						this.pinFull(tMs);
-					}
-				}
-				break;
-			case HERO_ALI:
-				if (!this.flurryActive) {
-					this.heroChops += 1;
-					if (this.heroChops > 0 && this.heroChops % ALI_FLURRY_EVERY === 0) {
-						this.flurryActive = true;
-						this.flurryRemaining = FLURRY_COUNT;
-						this.flurryNextAtMs = satAdd(tMs, FLURRY_STEP_MS);
-						this.pinFull(tMs);
-						this.playerLeft = this.aliSafeSide();
-					}
-				}
-				break;
-			case HERO_AMIRHOSSEIN:
-				this.scorePoint();
-				break;
-			case HERO_ERFAN:
-				if ((this.deadlineMs - tMs) / this.qaMs < 0.5) {
-					this.scoreBonus2();
-				}
-				break;
-			case HERO_AHMAD:
-				this.heroChops += 1;
-				if (this.heroChops > 0 && this.heroChops % AHMAD_SHIELD_EVERY === 0) {
-					this.shields += 1;
-				}
-				break;
-			default:
-				break;
-		}
+		this.heroProgress(tMs);
 		return EV_ALIVE;
 	}
 

@@ -80,7 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Companion records inputs in the capture phase (before the bundle's
+- Death-chop scoring: the bundle runs per-hero blocks even after the
+  killing chop, so Amirhossein +1 and Erfan clutch +2 land on lethal
+  rounds too. Replays match instead of rejecting by one point.
   handlers), so even a synchronously lethal chop lands in the trace;
   touch buttons observed at window level. Reports retry once on
   transport failure (server verdicts never repost).
