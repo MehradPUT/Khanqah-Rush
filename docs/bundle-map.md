@@ -66,6 +66,46 @@ the companion reporter relies on that.
 (`h` truthy = round over). The companion reporter watches this plus
 `window.score`; no bundle hooks required.
 
+## Surgical patches (string-level only, mirrored public/ ↔ dist/)
+
+- H/L + A/D keys, seeded `__rng50()` spawns (see git history).
+- `window.khanqahGame.isFargolSacrificeInProgress()` (line ~1665):
+  exposes the sacrifice cinematic flag so the companion skips inputs
+  the bundle ignores. SHA-256 `174C1917…4AE5B` (both copies).
+
+## Hero mechanics (sim contract)
+
+Roster (`ALL_CHARACTERS`, line ~1222): nima, fargol, ali, amirhossein,
+parsa, ahmad, erfan, fateme. Per-chop core (line 2632): first chop sets
+`ba=now+4250`; lethal branch kills via `Va()`; survived chops do
+`ba+=Ga` capped at `now+qa`, `ca++`. Round init sets
+`ba=now+4250, qa=8500, Ga=250, ca=0, Ha=1`. Every `ca%20===0` after an
+increment fires `nb()`: `qa*=.95, Ga*=.95` (float64 chain — the JS and
+Rust sims replicate the exact op order).
+
+- Nima: 20 s cycle from `gameStartTime`, `ba` pinned while pos ≥ 15 s.
+- Fargol: chop counter (non-flame chops); `%100===0` starts 5 s flame
+  (stamina pinned, lethal branches survive with +1 and a shift).
+  Lethal with sacrifice left: survive, 880 ms cinematic (inputs
+  ignored), branch cleanup +1 at ~420 ms. Once per round.
+- Ali: counter (non-flurry chops); `%50===0` starts 10 auto safe chops
+  at 95 ms cadence (stamina pinned, manual inputs ignored). Counter
+  never resets (next at 100, 150, …).
+- Ahmad: counter; `%100===0` earns a stacking shield. Lethal with a
+  shield: survive with +1 and shifts. Exhaustion with a shield: survive
+  with cleanup shift +1. Blocked chops don't advance the counter.
+- Parsa: exhaustion with < 2 naps: 3 s sleep then wait-for-chop, both
+  stamina-pinned (exhaustion check skipped); next chop resumes full.
+- Amirhossein: +1 extra per survived chop (2 total).
+- Erfan: post-chop stamina ratio `(ba-now)/qa < 0.5` scores +2 extra
+  (3 total).
+- Fateme: no abilities.
+- Lethal on a `|bottom|===1` branch shifts the queue (shatter `$a`);
+  post-death queue state is unobservable except via survival saves.
+- Death only via the rAF loop (`Va()` on deadline, chop-time checks
+  excluded) or branch chops; the 400 ms `setTimeout(rb,400)` delays
+  `in_result`.
+
 ## Stamina and Nima rejuvenation (sim-critical)
 
 Stamina is a deadline timestamp (`ba`): first chop sets `now + 4250 ms`,

@@ -378,12 +378,23 @@ export function buildSetGameScoreCall({
 	};
 }
 
-import { EV_ALIVE, Sim } from "../shared/sim.js"; // ---------------------------------------------------------------------------
+import { EV_ALIVE, Sim } from "../shared/sim.js";
+// ---------------------------------------------------------------------------
 // Trace codec lives in shared/trace-codec.js (single source for page,
 // server, and tests). Imported for internal use and re-exported so
 // existing importers keep working.
 // ---------------------------------------------------------------------------
 import {
+	HERO_AHMAD,
+	HERO_ALI,
+	HERO_AMIRHOSSEIN,
+	HERO_COUNT,
+	HERO_ERFAN,
+	HERO_FARGOL,
+	HERO_FATEME,
+	HERO_NIMA,
+	HERO_PARSA,
+	heroIdForName,
 	packTrace,
 	sha256Hex,
 	splitSeedHex,
@@ -396,6 +407,16 @@ import {
 } from "../shared/trace-codec.js";
 
 export {
+	HERO_AHMAD,
+	HERO_ALI,
+	HERO_AMIRHOSSEIN,
+	HERO_COUNT,
+	HERO_ERFAN,
+	HERO_FARGOL,
+	HERO_FATEME,
+	HERO_NIMA,
+	HERO_PARSA,
+	heroIdForName,
 	packTrace,
 	sha256Hex,
 	splitSeedHex,

@@ -15,6 +15,8 @@
  * bot server; otherwise the game stays local-only. Silent by design.
  */
 import {
+	heroIdForName,
+	HERO_NIMA,
 	packTrace,
 	sha256Hex,
 	splitSeedHex,
@@ -46,6 +48,37 @@ function wrapClasses() {
 		return document.getElementById("page_wrap")?.className ?? "<no page_wrap>";
 	} catch {
 		return "<unreadable>";
+	}
+}
+
+/** Selected hero id for the trace (Nima when unreadable). */
+function readHero() {
+	try {
+		return heroIdForName(window.khanqahGame?.getCharacter?.());
+	} catch {
+		return HERO_NIMA;
+	}
+}
+
+/**
+ * True while the bundle ignores chop inputs but the round goes on:
+ * Ali's auto-flurry, Parsa's nap, Fargol's sacrifice cinematic. Inputs
+ * here must not enter the trace, or replay diverges. Each flag is read
+ * synchronously per input, so companion and bundle always agree.
+ */
+function inputIgnored() {
+	try {
+		const game = window.khanqahGame;
+		if (!game) {
+			return false;
+		}
+		return !!(
+			game.isAliFlurryActive?.() ||
+			game.isParsaSleeping?.() ||
+			game.isFargolSacrificeInProgress?.()
+		);
+	} catch {
+		return false;
 	}
 }
 
@@ -202,7 +235,7 @@ function hideBadge() {
 	}
 }
 
-async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
+async function reportOnce(launch, score, durationSec, chops, endTimeMs, hero) {
 	// Resolves "verdict" once the server answered (saved/rejected) or the
 	// failure is permanent; "retry" when no verdict was reached (network
 	// down, stalled stage) and the poll may try once more.
@@ -221,6 +254,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		durationSec,
 		chops: chops.length,
 		endTimeMs,
+		hero,
 		classes: wrapClasses(),
 	});
 	try {
@@ -231,6 +265,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 			return "verdict";
 		}
 		const raw = packTrace({
+			hero,
 			seedLo: launch.seed.seedLo,
 			seedHi: launch.seed.seedHi,
 			chops,
@@ -353,6 +388,7 @@ function watch() {
 	let roundStart = null;
 	let reported = false;
 	let chops = [];
+	let hero = HERO_NIMA;
 	// Frozen finished round awaiting the poll's report. The bundle drops
 	// `in_game` and raises `in_result` in the same synchronous block, so
 	// the observer must freeze — never wipe — a round that just ended;
@@ -389,12 +425,13 @@ function watch() {
 					// Stream already reset by the primer; never reset here.
 					roundStart = Date.now();
 					chops = [];
+					hero = readHero();
 					pending = null;
-					dlog("round start seen", { classes: wrapClasses() });
+					dlog("round start seen", { classes: wrapClasses(), hero });
 				}
 			} else if (gameOver()) {
 				if (roundStart !== null) {
-					pending = { chops, roundStart };
+					pending = { chops, roundStart, hero };
 					dlog("round frozen for report", {
 						classes: wrapClasses(),
 						chops: chops.length,
@@ -428,7 +465,12 @@ function watch() {
 	}
 	const record = (side) => {
 		try {
-			if (roundStart === null || !inGame() || gameOver()) {
+			if (
+				roundStart === null ||
+				!inGame() ||
+				gameOver() ||
+				inputIgnored()
+			) {
 				return;
 			}
 			chops.push({ side, t: Date.now() - roundStart });
@@ -520,7 +562,8 @@ function watch() {
 			}
 			// Prefer live data (observer may not have run yet); fall back
 			// to the frozen round.
-			const src = roundStart !== null ? { chops, roundStart } : pending;
+			const src =
+				roundStart !== null ? { chops, roundStart, hero } : pending;
 			if (
 				score > 0 &&
 				gameOver() &&
@@ -540,20 +583,30 @@ function watch() {
 					chops: src.chops.length,
 					endTimeMs,
 					attempt: attempts,
+					hero: src.hero,
 				});
-				void reportOnce(launch, score, durationSec, src.chops, endTimeMs).then(
-					(outcome) => {
-						// No verdict (network down, stalled stage): restore the
-						// round for one more attempt while the result screen
-						// is still up. A verdict never reposts.
-						if (outcome === "retry" && attempts < 2) {
-							pending = { chops: src.chops, roundStart: src.roundStart };
-							reported = false;
-							skipLogged = false;
-							dlog("report will retry", { attempts });
-						}
-					},
-				);
+				void reportOnce(
+					launch,
+					score,
+					durationSec,
+					src.chops,
+					endTimeMs,
+					src.hero,
+				).then((outcome) => {
+					// No verdict (network down, stalled stage): restore the
+					// round for one more attempt while the result screen
+					// is still up. A verdict never reposts.
+					if (outcome === "retry" && attempts < 2) {
+						pending = {
+							chops: src.chops,
+							roundStart: src.roundStart,
+							hero: src.hero,
+						};
+						reported = false;
+						skipLogged = false;
+						dlog("report will retry", { attempts });
+					}
+				});
 				roundStart = null;
 				chops = [];
 			} else if (gameOver() && !reported && !skipLogged) {

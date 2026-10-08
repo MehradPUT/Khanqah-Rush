@@ -7,8 +7,10 @@ import {
 	createSessionRegistry,
 	deriveSeed,
 	deriveSessionKey,
-	isSessionLive,
+	HERO_ALI,
+	HERO_NIMA,
 	issueLaunchToken,
+	isSessionLive,
 	packTrace,
 	replayTrace,
 	SESSION_TTL_SEC,
@@ -31,6 +33,7 @@ function hex(buf) {
 async function validEnvelope(overrides = {}) {
 	const sessionId = "sid-test";
 	const raw = packTrace({
+		hero: HERO_NIMA,
 		seedLo: 9,
 		seedHi: 0,
 		chops: [{ side: 0, t: 100 }],
@@ -311,10 +314,46 @@ describe("trace codec", () => {
 			{ side: 1, t: 450 },
 			{ side: 0, t: 900 },
 		];
-		const raw = packTrace({ seedLo: 42, seedHi: 0, chops, endTimeMs: 1200 });
+		const raw = packTrace({
+			hero: HERO_ALI,
+			seedLo: 42,
+			seedHi: 0,
+			chops,
+			endTimeMs: 1200,
+		});
 		expect(raw).not.toBeNull();
 		const back = unpackTrace(traceFromB64(traceToB64(raw)));
-		expect(back).toEqual({ seedLo: 42, seedHi: 0, chops, endTimeMs: 1200 });
+		expect(back).toEqual({
+			hero: HERO_ALI,
+			seedLo: 42,
+			seedHi: 0,
+			chops,
+			endTimeMs: 1200,
+		});
+	});
+
+	it("unpacks v1 traces as Nima and rejects bad heroes", async () => {
+		// Hand-built v1 frame (no hero byte): version + seed + 0 chops.
+		const v1 = new Uint8Array(15);
+		const view = new DataView(v1.buffer);
+		view.setUint8(0, 1);
+		view.setUint32(1, 9, true);
+		view.setUint32(5, 0, true);
+		view.setUint16(9, 0, true);
+		view.setUint32(11, 200, true);
+		expect(unpackTrace(v1)).toEqual({
+			hero: HERO_NIMA,
+			seedLo: 9,
+			seedHi: 0,
+			chops: [],
+			endTimeMs: 200,
+		});
+		expect(
+			packTrace({ seedLo: 1, seedHi: 0, chops: [], endTimeMs: 5 }),
+		).toBeNull();
+		expect(
+			packTrace({ hero: 99, seedLo: 1, seedHi: 0, chops: [], endTimeMs: 5 }),
+		).toBeNull();
 	});
 
 	it("rejects malformed traces and payloads", async () => {
@@ -326,6 +365,7 @@ describe("trace codec", () => {
 		expect(traceFromB64("!!!not-base64!!!")).toBeNull();
 		expect(
 			packTrace({
+				hero: HERO_NIMA,
 				seedLo: 1,
 				seedHi: 0,
 				chops: [{ side: 2, t: 5 }],
@@ -333,10 +373,11 @@ describe("trace codec", () => {
 			}),
 		).toBeNull();
 		expect(
-			packTrace({ seedLo: 1, seedHi: 0, chops: [], endTimeMs: -1 }),
+			packTrace({ hero: HERO_NIMA, seedLo: 1, seedHi: 0, chops: [], endTimeMs: -1 }),
 		).toBeNull();
 		expect(
 			packTrace({
+				hero: HERO_NIMA,
 				seedLo: 1,
 				seedHi: 0,
 				chops: [{ side: 0, t: 9 }],
@@ -345,6 +386,7 @@ describe("trace codec", () => {
 		).not.toBeNull();
 		// Time travel is caught at unpack.
 		const bad = packTrace({
+			hero: HERO_NIMA,
 			seedLo: 1,
 			seedHi: 0,
 			chops: [
@@ -390,6 +432,7 @@ describe("deterministic replay", () => {
 			chops.push({ side, t });
 		}
 		const raw = packTrace({
+			hero: HERO_NIMA,
 			seedLo: view.getUint32(0, true),
 			seedHi: view.getUint32(4, true),
 			chops,
@@ -459,7 +502,7 @@ describe("deterministic replay", () => {
 		}
 		expect(chops.length).toBe(100);
 		const endTimeMs = t + 9000;
-		const raw = packTrace({ seedLo, seedHi, chops, endTimeMs });
+		const raw = packTrace({ hero: HERO_NIMA, seedLo, seedHi, chops, endTimeMs });
 		const traceB64 = Buffer.from(raw).toString("base64");
 		const result = await replayTrace({
 			traceB64,

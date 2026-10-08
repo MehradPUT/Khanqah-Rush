@@ -1662,6 +1662,7 @@ window.khanqahGame = {
   getFargolChops: function() { return fargolChops; },
   isFargolFlaming: function() { return fargolFlameActive; },
   isFargolSacrificeAvailable: function() { return fargolSacrificeAvailable; },
+  isFargolSacrificeInProgress: function() { return fargolSacrificeInProgress; },
   getAliChops: function() { return aliChops; },
   isAliFlurryActive: function() { return aliFlurryActive; },
   getAliFlurryRemaining: function() { return aliFlurryRemaining; },

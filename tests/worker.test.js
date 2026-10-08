@@ -40,6 +40,7 @@ function post(path, body, headers = {}) {
 async function traceFields(seedHex) {
 	const { seedLo, seedHi } = splitSeedHex(seedHex);
 	const raw = packTrace({
+		hero: 0,
 		seedLo,
 		seedHi,
 		chops: [{ side: 0, t: 100 }],
@@ -65,7 +66,7 @@ async function submitReplayed({ lt, sid, key, seedHex }) {
 		t += 200;
 		chops.push({ side: i % 2 === 0 ? 0 : 1, t });
 	}
-	const raw = packTrace({ seedLo, seedHi, chops, endTimeMs: t });
+	const raw = packTrace({ hero: 0, seedLo, seedHi, chops, endTimeMs: t });
 	const bytes = Buffer.from(raw);
 	const trace = bytes.toString("base64");
 	const traceHash = createHash("sha256").update(bytes).digest("hex");

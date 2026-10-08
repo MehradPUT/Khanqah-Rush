@@ -7,18 +7,51 @@
  * and even the 10k-chop cap fits a POST easily. CompressionStream is
  * deliberately avoided — several mobile browsers never resolve it.
  *
- * Trace v1 binary layout (all integers little-endian):
- *   u8 version (1) || u32 seed_lo || u32 seed_hi || u16 chop count ||
- *   entries || u32 end_t_ms. Each entry is u32 t_ms + u8 side (0 LEFT,
- *   1 RIGHT). Transported base64-encoded.
+ * Trace v2 binary layout (all integers little-endian):
+ *   u8 version (2) || u8 hero || u32 seed_lo || u32 seed_hi ||
+ *   u16 chop count || entries || u32 end_t_ms. Each entry is u32 t_ms +
+ *   u8 side (0 LEFT, 1 RIGHT). Transported base64-encoded.
+ * v1 traces (no hero byte) still unpack, defaulting to Nima.
  */
 
-export const TRACE_VERSION = 1;
+export const TRACE_VERSION = 2;
 export const TRACE_MAX_BYTES = 65536;
 export const TRACE_MAX_CHOPS = 10000;
 
-export function packTrace({ seedLo, seedHi, chops, endTimeMs }) {
+// Hero ids shared by the trace, the companion, and both sims.
+export const HERO_NIMA = 0;
+export const HERO_FARGOL = 1;
+export const HERO_ALI = 2;
+export const HERO_AMIRHOSSEIN = 3;
+export const HERO_PARSA = 4;
+export const HERO_AHMAD = 5;
+export const HERO_ERFAN = 6;
+export const HERO_FATEME = 7;
+export const HERO_COUNT = 8;
+
+const HERO_BY_NAME = {
+	nima: HERO_NIMA,
+	fargol: HERO_FARGOL,
+	ali: HERO_ALI,
+	amirhossein: HERO_AMIRHOSSEIN,
+	parsa: HERO_PARSA,
+	ahmad: HERO_AHMAD,
+	erfan: HERO_ERFAN,
+	fateme: HERO_FATEME,
+};
+
+/** Bundle hero id string → trace hero byte; unknown defaults to Nima. */
+export function heroIdForName(name) {
+	return (
+		HERO_BY_NAME[String(name ?? "").toLowerCase()] ?? HERO_NIMA
+	);
+}
+
+export function packTrace({ hero, seedLo, seedHi, chops, endTimeMs }) {
 	if (
+		!Number.isInteger(hero) ||
+		hero < 0 ||
+		hero >= HERO_COUNT ||
 		!Number.isInteger(seedLo) ||
 		!Number.isInteger(seedHi) ||
 		!Array.isArray(chops) ||
@@ -28,10 +61,12 @@ export function packTrace({ seedLo, seedHi, chops, endTimeMs }) {
 	) {
 		return null;
 	}
-	const raw = new Uint8Array(1 + 4 + 4 + 2 + chops.length * 5 + 4);
+	const raw = new Uint8Array(1 + 1 + 4 + 4 + 2 + chops.length * 5 + 4);
 	const view = new DataView(raw.buffer);
 	let o = 0;
 	view.setUint8(o, TRACE_VERSION);
+	o += 1;
+	view.setUint8(o, hero);
 	o += 1;
 	view.setUint32(o, seedLo >>> 0, true);
 	o += 4;
@@ -63,17 +98,29 @@ export function unpackTrace(raw) {
 	}
 	const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
 	let o = 0;
-	if (view.getUint8(o) !== TRACE_VERSION) {
+	const version = view.getUint8(o);
+	o += 1;
+	let hero = HERO_NIMA;
+	if (version === TRACE_VERSION) {
+		hero = view.getUint8(o);
+		o += 1;
+		if (hero < 0 || hero >= HERO_COUNT) {
+			return null;
+		}
+		if (raw.length < 16) {
+			return null;
+		}
+	} else if (version !== 1) {
 		return null;
 	}
-	o += 1;
 	const seedLo = view.getUint32(o, true);
 	o += 4;
 	const seedHi = view.getUint32(o, true);
 	o += 4;
 	const count = view.getUint16(o, true);
 	o += 2;
-	if (count > TRACE_MAX_CHOPS || raw.length !== 1 + 4 + 4 + 2 + count * 5 + 4) {
+	const want = 1 + (version === TRACE_VERSION ? 1 : 0) + 4 + 4 + 2 + count * 5 + 4;
+	if (count > TRACE_MAX_CHOPS || raw.length !== want) {
 		return null;
 	}
 	const chops = [];
@@ -93,7 +140,7 @@ export function unpackTrace(raw) {
 	if (endTimeMs < prevT) {
 		return null;
 	}
-	return { seedLo, seedHi, chops, endTimeMs };
+	return { hero, seedLo, seedHi, chops, endTimeMs };
 }
 
 function b64Encode(bytes) {
