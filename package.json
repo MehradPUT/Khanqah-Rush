@@ -12,7 +12,8 @@
 		"lint": "biome check .",
 		"format": "biome check --write .",
 		"wasm:build": "node scripts/build-wasm.mjs",
-		"prebuild": "npm run wasm:build",
+		"frontend:build": "node scripts/build-frontend.mjs",
+		"prebuild": "npm run wasm:build && npm run frontend:build",
 		"deploy": "npm run build && npx wrangler deploy"
 	},
 	"dependencies": {

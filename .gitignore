@@ -21,6 +21,10 @@ dist-ssr/
 public/wasm/
 wasm/*/target/
 
+# Built Raylib frontend (rebuilt via npm run frontend:build)
+public/game/
+frontend/target/
+
 # Wrangler local state
 .wrangler/
 

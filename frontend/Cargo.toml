@@ -1,0 +1,10 @@
+[package]
+name = "khanqah-frontend"
+version = "0.1.0"
+edition = "2021"
+
+# Raylib + Rust game frontend, compiled to WASM via Emscripten.
+# See docs/frontend-raylib.md for the toolchain and phase plan.
+
+[dependencies]
+raylib = "6.0"

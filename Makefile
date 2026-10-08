@@ -25,6 +25,9 @@ dev: ## Start the Vite dev server
 build: ## Vite build into dist/
 	npm run build
 
+frontend: ## Build the Raylib frontend into public/game/ (needs emsdk)
+	npm run frontend:build
+
 preview: ## Preview the production build locally
 	npm run preview
 
