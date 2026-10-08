@@ -73,9 +73,13 @@ function wrap(exports) {
 		if (!(key instanceof Uint8Array) || key.length !== 32) {
 			return false;
 		}
-		const slot = new Uint8Array(memory.buffer, msgPtr(), key.length);
-		slot.set(key);
-		return initSession(msgPtr(), key.length) === 0;
+		try {
+			const slot = new Uint8Array(memory.buffer, msgPtr(), key.length);
+			slot.set(key);
+			return initSession(msgPtr(), key.length) === 0;
+		} catch {
+			return false;
+		}
 	}
 
 	function signBytes(message) {
@@ -86,11 +90,15 @@ function wrap(exports) {
 		) {
 			return null;
 		}
-		new Uint8Array(memory.buffer, msgPtr(), message.length).set(message);
-		if (signTag(message.length) !== 0) {
+		try {
+			new Uint8Array(memory.buffer, msgPtr(), message.length).set(message);
+			if (signTag(message.length) !== 0) {
+				return null;
+			}
+			return new Uint8Array(memory.buffer.slice(tagPtr(), tagPtr() + 32));
+		} catch {
 			return null;
 		}
-		return new Uint8Array(memory.buffer.slice(tagPtr(), tagPtr() + 32));
 	}
 
 	return {
@@ -104,7 +112,12 @@ function wrap(exports) {
 	};
 }
 
-export async function loadSigner(fetchImpl = fetch, base = "/") {
+// fetchImpl defaults to a bound closure: a detached bare `fetch`
+// reference throws Illegal invocation on some browsers.
+export async function loadSigner(
+	fetchImpl = (...args) => fetch(...args),
+	base = "/",
+) {
 	try {
 		const response = await fetchImpl(`${base}wasm/signer.wasm`);
 		if (!response.ok) {

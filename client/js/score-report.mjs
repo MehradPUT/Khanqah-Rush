@@ -203,6 +203,9 @@ function hideBadge() {
 }
 
 async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
+	// Resolves "verdict" once the server answered (saved/rejected) or the
+	// failure is permanent; "retry" when no verdict was reached (network
+	// down, stalled stage) and the poll may try once more.
 	const fail = (stage, detail) => {
 		dlog("report failed", {
 			stage,
@@ -225,7 +228,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		dlog("report stage: signer ready", { ok: !!signer });
 		if (!signer) {
 			fail("signer-missing");
-			return;
+			return "verdict";
 		}
 		const raw = packTrace({
 			seedLo: launch.seed.seedLo,
@@ -235,7 +238,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		});
 		if (!raw) {
 			fail("pack-failed");
-			return;
+			return "verdict";
 		}
 		dlog("report stage: packed", { bytes: raw.length });
 		const trace = traceToB64(raw);
@@ -246,7 +249,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		);
 		if (!traceHash) {
 			fail("hash-failed");
-			return;
+			return "verdict";
 		}
 		const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
 		const nonce = Array.from(nonceBytes)
@@ -263,7 +266,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		});
 		if (!tag) {
 			fail("no-tag");
-			return;
+			return "verdict";
 		}
 		let recorded = false;
 		let netError = false;
@@ -313,7 +316,7 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		});
 		if (netError) {
 			fail("net-error");
-			return;
+			return "retry";
 		}
 		window.__khanqah.lastReport = recorded
 			? "saved"
@@ -322,8 +325,12 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 			recorded ? "✓ score saved" : `✗ ${debugReason ?? "not recorded"}`,
 			recorded ? "#15803d" : "#b91c1c",
 		);
+		return "verdict";
 	} catch (err) {
-		fail("error", err instanceof Error ? err.message : String(err));
+		const message = err instanceof Error ? err.message : String(err);
+		fail("error", message);
+		// Stalled stages (timeouts) are transient; anything else stands.
+		return message.startsWith("timeout:") ? "retry" : "verdict";
 	}
 }
 
@@ -353,6 +360,10 @@ function watch() {
 	let pending = null;
 	let overLogged = false;
 	let skipLogged = false;
+	// Bounded retries: a report with no server verdict (network down,
+	// stalled stage) may try once more; a verdict (saved/rejected) never
+	// reposts. Reset every round.
+	let attempts = 0;
 	// Pre-round stream reset: capture-phase listeners run before the
 	// bundle's own handlers in the same user gesture, so the seeded stream
 	// restarts ahead of the round-init draws. Poll-based reset would come
@@ -425,22 +436,41 @@ function watch() {
 			// Observer must never disturb the game.
 		}
 	};
-	window.addEventListener("keydown", (e) => {
-		const code = e.code;
-		if (code === "ArrowLeft" || code === "KeyA" || code === "KeyH") {
-			record(0);
-		} else if (code === "ArrowRight" || code === "KeyD" || code === "KeyL") {
-			record(1);
-		}
-	});
-	for (const [id, side] of [
-		["button_left", 0],
-		["button_right", 1],
-	]) {
-		document
-			.getElementById(id)
-			?.addEventListener("pointerdown", () => record(side));
-	}
+	// Capture phase (like the primer): record the input before the
+	// bundle's own handlers run, so even a lethal chop that ends the
+	// round synchronously is still in the trace. The gameOver() gate
+	// stays as second-line defence.
+	window.addEventListener(
+		"keydown",
+		(e) => {
+			const code = e.code;
+			if (code === "ArrowLeft" || code === "KeyA" || code === "KeyH") {
+				record(0);
+			} else if (code === "ArrowRight" || code === "KeyD" || code === "KeyL") {
+				record(1);
+			}
+		},
+		true,
+	);
+	window.addEventListener(
+		"pointerdown",
+		(e) => {
+			try {
+				const target = e.target instanceof Element ? e.target : null;
+				if (!target) {
+					return;
+				}
+				if (target.closest("#button_left")) {
+					record(0);
+				} else if (target.closest("#button_right")) {
+					record(1);
+				}
+			} catch {
+				// Observer must never disturb the game.
+			}
+		},
+		true,
+	);
 	setInterval(() => {
 		try {
 			const score = currentScore();
@@ -461,6 +491,7 @@ function watch() {
 				reported = false;
 				overLogged = false;
 				skipLogged = false;
+				attempts = 0;
 				window.__khanqah.recording = true;
 				window.__khanqah.chops = chops.length;
 				showBadge("● REC", "#b45309", true);
@@ -494,9 +525,11 @@ function watch() {
 				score > 0 &&
 				gameOver() &&
 				!reported &&
+				attempts < 2 &&
 				src !== null &&
 				src.roundStart !== null
 			) {
+				attempts += 1;
 				reported = true;
 				pending = null;
 				const endTimeMs = Date.now() - src.roundStart;
@@ -506,9 +539,20 @@ function watch() {
 					durationSec,
 					chops: src.chops.length,
 					endTimeMs,
+					attempt: attempts,
 				});
-				void reportOnce(launch, score, durationSec, src.chops, endTimeMs).catch(
-					() => {},
+				void reportOnce(launch, score, durationSec, src.chops, endTimeMs).then(
+					(outcome) => {
+						// No verdict (network down, stalled stage): restore the
+						// round for one more attempt while the result screen
+						// is still up. A verdict never reposts.
+						if (outcome === "retry" && attempts < 2) {
+							pending = { chops: src.chops, roundStart: src.roundStart };
+							reported = false;
+							skipLogged = false;
+							dlog("report will retry", { attempts });
+						}
+					},
 				);
 				roundStart = null;
 				chops = [];

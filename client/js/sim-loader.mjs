@@ -34,7 +34,9 @@ export const DEATH_NONE = 0;
 export const DEATH_BRANCH = 1;
 export const DEATH_EXHAUSTION = 2;
 
-const REQUIRED = [
+// Canonical WASM export surface. Reused by server replay validation so
+// both sides agree on the artifact shape (single source).
+export const SIM_REQUIRED_EXPORTS = [
 	"sim_version",
 	"sim_reset",
 	"sim_chop",
@@ -50,6 +52,8 @@ const REQUIRED = [
 	"sim_segments_len",
 	"memory",
 ];
+
+const REQUIRED = SIM_REQUIRED_EXPORTS;
 
 function wrap(exports) {
 	const raw = exports;
@@ -90,7 +94,10 @@ function wrap(exports) {
 	};
 }
 
-export async function loadSim(fetchImpl = fetch, base = "/") {
+export async function loadSim(
+	fetchImpl = (...args) => fetch(...args),
+	base = "/",
+) {
 	try {
 		const response = await fetchImpl(`${base}wasm/sim.wasm`);
 		if (!response.ok) {
