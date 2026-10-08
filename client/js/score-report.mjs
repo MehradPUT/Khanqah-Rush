@@ -49,6 +49,32 @@ function wrapClasses() {
 	}
 }
 
+// Signer warmed at page load, not at game over: fetching +
+// instantiating after death delays submission (and a quickly closed
+// tab would lose the score entirely). The module is 10 KB and the key
+// comes from the launch URL, so by report time this is resolved.
+let signerPromise = null;
+
+function warmSigner(launch) {
+	if (!signerPromise) {
+		dlog("warming signer");
+		signerPromise = loadSigner()
+			.then((signer) => {
+				if (signer?.setSessionKey(launch.key)) {
+					dlog("signer warm");
+					return signer;
+				}
+				dlog("signer warm failed");
+				return null;
+			})
+			.catch(() => {
+				dlog("signer warm failed");
+				return null;
+			});
+	}
+	return signerPromise;
+}
+
 // Reject if a stage stalls (mobile browsers can suspend work when the
 // tab loses focus); turns silent hangs into visible stage failures.
 function withTimeout(promise, ms, label) {
@@ -58,6 +84,28 @@ function withTimeout(promise, ms, label) {
 			setTimeout(() => reject(new Error(`timeout:${label}`)), ms);
 		}),
 	]);
+}
+
+// Resolve the warmed signer, with one fresh retry if warming stalled
+// (mobile browsers suspend background-tab work unpredictably).
+async function readySigner(launch) {
+	const warmed = await withTimeout(warmSigner(launch), 5000, "load-signer");
+	if (warmed) {
+		return warmed;
+	}
+	dlog("signer retry");
+	return withTimeout(
+		loadSigner()
+			.then((signer) => {
+				if (signer?.setSessionKey(launch.key)) {
+					return signer;
+				}
+				return null;
+			})
+			.catch(() => null),
+		8000,
+		"load-signer-retry",
+	);
 }
 
 function readLaunch() {
@@ -173,19 +221,10 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs) {
 		classes: wrapClasses(),
 	});
 	try {
-		dlog("report stage: load-signer");
-		const signer = await withTimeout(
-			loadSigner().catch(() => null),
-			15000,
-			"load-signer",
-		);
+		const signer = await readySigner(launch);
 		dlog("report stage: signer ready", { ok: !!signer });
 		if (!signer) {
 			fail("signer-missing");
-			return;
-		}
-		if (!signer.setSessionKey(launch.key)) {
-			fail("session-key");
 			return;
 		}
 		const raw = packTrace({
@@ -301,6 +340,9 @@ function watch() {
 	if (!launch) {
 		return;
 	}
+	// Warm the signer while the page loads so reporting after game over
+	// never waits on fetch + instantiation.
+	warmSigner(launch);
 	let roundStart = null;
 	let reported = false;
 	let chops = [];
