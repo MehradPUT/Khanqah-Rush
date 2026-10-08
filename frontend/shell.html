@@ -1,0 +1,128 @@
+<!--
+Khanqah Rush Emscripten shell (Raylib frontend).
+
+The build script inlines the generated loader at the marked spot
+below (cargo owns `-o`, so emcc never templates this file itself).
+The page hosts the game canvas with a loader overlay and a boot
+watchdog; game launch params (lt/sid/sk/seed) ride the URL untouched
+for the companion reporter (wired in a later phase).
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Khanqah Rush</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; background: #0e1220; color: #e8eaf6;
+                 font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+                 overflow: hidden; touch-action: none; }
+    #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+    canvas#canvas { width: 100%; height: 100%; display: block; outline: none; }
+
+    #overlay { position: fixed; inset: 0; background: #0e1220; display: flex; flex-direction: column;
+               align-items: center; justify-content: center; gap: 14px; z-index: 30; transition: opacity .3s; }
+    #overlay.hidden { opacity: 0; pointer-events: none; }
+    .axe { width: 54px; height: 54px; border-radius: 50%;
+           background: radial-gradient(circle at 32% 30%, #ffd76a, #b3541e 70%);
+           animation: chop .55s cubic-bezier(.5,.05,.5,1) infinite alternate; }
+    @keyframes chop { from { transform: translateY(-16px) rotate(-12deg); } to { transform: translateY(22px) rotate(12deg); } }
+    #overlay p { color: #8f9bbf; font-size: 14px; }
+    #loadError { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    #loadError[hidden] { display: none; }
+    #loadErrorText { color: #ff9d9d; max-width: 78vw; text-align: center; }
+    #retryBtn { font: inherit; font-size: 15px; font-weight: 600; color: #0e1220;
+                background: #ffd76a; border: 0; border-radius: 10px; padding: 10px 28px;
+                cursor: pointer; touch-action: manipulation; }
+  </style>
+</head>
+<body>
+  <div id="stage"><canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas></div>
+
+  <div id="overlay">
+    <div class="axe" id="loadAxe"></div>
+    <p id="statusText">Loading Khanqah Rush…</p>
+    <div id="loadError" hidden>
+      <p id="loadErrorText"></p>
+      <button id="retryBtn" type="button">Retry</button>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    // Keep the canvas backing store matched to the viewport (CSS pixels).
+    // Calls the game's exported resize hook when present; safe no-op
+    // until the scene port (Phase 3) provides one.
+    window.khanqah_fitCanvas = function () {
+      try {
+        const canvas = document.getElementById('canvas');
+        if (!canvas) return;
+        const w = Math.floor(canvas.clientWidth), h = Math.floor(canvas.clientHeight);
+        if (w <= 0 || h <= 0) return;
+        if (w !== window.__khanqah_w || h !== window.__khanqah_h ||
+            canvas.width !== w || canvas.height !== h) {
+          window.__khanqah_w = w; window.__khanqah_h = h;
+          if (window.Module && typeof window.Module._khanqah_resize === 'function') {
+            window.Module._khanqah_resize(w, h);
+          }
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('resize', function () { if (window.khanqah_fitCanvas) window.khanqah_fitCanvas(); });
+    window.addEventListener('orientationchange', function () { if (window.khanqah_fitCanvas) window.khanqah_fitCanvas(); });
+    document.addEventListener('visibilitychange', function () { if (window.khanqah_fitCanvas) window.khanqah_fitCanvas(); });
+
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      setStatus: function (text) {
+        const overlay = document.getElementById('overlay');
+        const statusText = document.getElementById('statusText');
+        if (text) { overlay.classList.remove('hidden'); statusText.textContent = text; }
+        else { overlay.classList.add('hidden'); }
+      },
+      onRuntimeInitialized: function () {
+        if (window.khanqah_booted) window.khanqah_booted();
+        if (window.khanqah_fitCanvas) {
+          window.khanqah_fitCanvas();
+          setTimeout(window.khanqah_fitCanvas, 500);
+          setTimeout(window.khanqah_fitCanvas, 2000);
+        }
+      },
+      onAbort: function (what) {
+        if (window.khanqah_showLoadError) {
+          window.khanqah_showLoadError('The game failed to start' + (what ? ': ' + what : '') + '.');
+        }
+      }
+    };
+
+    // Boot watchdog: after 30s without runtime init, swap the spinner
+    // for an error state with a retry button; a late boot still hides
+    // the overlay via setStatus('').
+    (function bootWatchdog() {
+      let booted = false;
+      window.khanqah_booted = function () { booted = true; };
+      window.khanqah_showLoadError = function (msg) {
+        try {
+          document.getElementById('loadAxe').style.display = 'none';
+          document.getElementById('statusText').textContent = 'Khanqah Rush couldn\u2019t load.';
+          document.getElementById('loadErrorText').textContent = msg;
+          document.getElementById('loadError').hidden = false;
+        } catch (e) {}
+      };
+      document.getElementById('retryBtn').addEventListener('click', function () {
+        location.reload();
+      });
+      setTimeout(function () {
+        if (!booted) window.khanqah_showLoadError('Still loading after 30s — the connection may be slow.');
+      }, 30000);
+    })();
+
+    // Keep game keys from scrolling the page inside webviews.
+    window.addEventListener('keydown', function (e) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].indexOf(e.key) >= 0) e.preventDefault();
+    }, { passive: false });
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

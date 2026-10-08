@@ -48,8 +48,11 @@ Makefiles (Ninja is rejected by the toolchain file on Windows).
 ## Phase plan
 
 1. Spike: compile + link through the whole chain. (Done.)
-2. Page + asset embedding; boot the build in a browser.
+2. Page + boot: shell template (`frontend/shell.html`), build emits
+   `public/game/index.html` + loader + WASM, `/game/` serves all
+   three with correct types. (Done, verified locally.)
 3. Scene port (tree, lumberjack, chop effects) to visual parity.
-4. HUD, carousel, result screen, audio, haptics hooks.
+4. Assets (`--preload-file`), HUD, carousel, result screen, audio,
+   haptics hooks.
 5. Sim bridge + input parity; pixel + outcome regression tests.
 6. Flag flip with legacy fallback; playtest matrix.

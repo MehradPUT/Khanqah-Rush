@@ -18,8 +18,15 @@
 // - Let emcmake default to MinGW Makefiles (Ninja is rejected by the
 //   emscripten toolchain file on Windows).
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const TARGET = "wasm32-unknown-emscripten";
 const release = process.argv.includes("--release");
@@ -85,6 +92,8 @@ if (!haveToolchain()) {
 const emccExe = emsdkBin(process.platform === "win32" ? "emcc.exe" : "emcc");
 const emDir = dirname(emccExe);
 const toPosix = (p) => p.replaceAll("\\", "/");
+// Absolute repo root (this script lives in <root>/scripts/).
+const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const env = {
 	...process.env,
 	EMCC_CFLAGS:
@@ -117,6 +126,27 @@ for (const file of ["khanqah-frontend.js", "khanqah_frontend.wasm"]) {
 	}
 }
 mkdirSync("public/game", { recursive: true });
-copyFileSync(join(outDir, "khanqah-frontend.js"), "public/game/khanqah-frontend.js");
-copyFileSync(join(outDir, "khanqah_frontend.wasm"), "public/game/khanqah_frontend.wasm");
-console.log("[frontend] wrote public/game/khanqah-frontend.js + .wasm");
+copyFileSync(
+	join(outDir, "khanqah-frontend.js"),
+	"public/game/khanqah-frontend.js",
+);
+copyFileSync(
+	join(outDir, "khanqah_frontend.wasm"),
+	"public/game/khanqah_frontend.wasm",
+);
+// The page entry is our shell template with the loader inlined where
+// Emscripten would put {{{ SCRIPT }}} (cargo owns `-o`, so emcc never
+// sees an .html output to template itself).
+const shell = readFileSync(join(rootDir, "frontend/shell.html"), "utf8");
+const MARKER = "{{{ SCRIPT }}}";
+if (shell.split(MARKER).length !== 2) {
+	console.error(
+		"[frontend] shell template must contain {{{ SCRIPT }}} exactly once",
+	);
+	process.exit(1);
+}
+writeFileSync(
+	"public/game/index.html",
+	shell.replace(MARKER, '<script src="khanqah-frontend.js"></script>'),
+);
+console.log("[frontend] wrote public/game/index.html + .js + .wasm");
