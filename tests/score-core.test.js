@@ -129,6 +129,7 @@ describe("launch tokens", () => {
 		expect(isSessionLive(launch, "sid-live", NOW + SESSION_TTL_SEC)).toBe(
 			false,
 		);
+		expect(isSessionLive(launch, "sid-live", NOW - 1)).toBe(false);
 		expect(isSessionLive(null, "sid-live", NOW)).toBe(false);
 	});
 });
@@ -330,6 +331,9 @@ describe("trace codec", () => {
 				chops: [{ side: 2, t: 5 }],
 				endTimeMs: 9,
 			}),
+		).toBeNull();
+		expect(
+			packTrace({ seedLo: 1, seedHi: 0, chops: [], endTimeMs: -1 }),
 		).toBeNull();
 		expect(
 			packTrace({

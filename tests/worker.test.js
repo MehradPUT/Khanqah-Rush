@@ -425,6 +425,82 @@ describe("worker entry", () => {
 		}
 	});
 
+	it("reports telegram write failures instead of claiming saved", async () => {
+		const telegramMock = vi.fn(async (url) => {
+			if (url.endsWith("/setGameScore")) {
+				return new Response(
+					JSON.stringify({ ok: false, description: "Bad Request" }),
+				);
+			}
+			return new Response(JSON.stringify({ ok: true }));
+		});
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			const { lt, sid, sk, seed } = await launchViaWebhook(telegramMock);
+			const key = await deriveSessionKey("test-secret", sid);
+			expect(sk).toBeTruthy();
+			const played = await submitReplayed({ lt, sid, key, seedHex: seed });
+			if (!played) {
+				return;
+			}
+			expect(await played.response.json()).toMatchObject({
+				ok: true,
+				recorded: false,
+			});
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("degrades cleanly without assets or game name configured", async () => {
+		const telegramMock = vi.fn(
+			async () => new Response(JSON.stringify({ ok: true })),
+		);
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			// No GAME_SHORT_NAME: callback ignored, never crashes.
+			const res = await worker.fetch(
+				post(
+					"/telegram-webhook",
+					{
+						callback_query: {
+							id: "q-noname",
+							game_short_name: "khanqah_rush",
+							from: { id: 7 },
+							message: { chat: { id: 8 }, message_id: 9 },
+						},
+					},
+					{ "X-Telegram-Bot-Api-Secret-Token": "wh-secret" },
+				),
+				{ ...ENV, GAME_SHORT_NAME: undefined },
+			);
+			expect(res.status).toBe(200);
+			expect(telegramMock).not.toHaveBeenCalled();
+
+			// No ASSETS binding: replay cannot load the sim, deny loudly.
+			const { lt, sid, seed } = await launchViaWebhook(telegramMock);
+			const key = await deriveSessionKey("test-secret", sid);
+			const body = await signedBody({
+				lt,
+				sid,
+				key,
+				score: 1,
+				durationSec: 5,
+				seedHex: seed,
+			});
+			const noAssets = await worker.fetch(post("/api/setScore", body), {
+				...ENV,
+				ASSETS: undefined,
+			});
+			expect(await noAssets.json()).toMatchObject({
+				ok: true,
+				recorded: false,
+			});
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("mints sessions for inline launches and writes via inline_message_id", async () => {
 		const telegramMock = vi.fn(
 			async () => new Response(JSON.stringify({ ok: true })),

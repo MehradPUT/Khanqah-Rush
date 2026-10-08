@@ -63,4 +63,18 @@ describe("legacy entry smoke", () => {
 		expect(reporter).toContain("launch.seed.seedLo");
 		expect(reporter).not.toContain("TELEGRAM_BOT_TOKEN");
 	});
+
+	it("ships the companion inside the built assets", () => {
+		// Vite absorbs the module script tag into the bundle; the page
+		// must not depend on a separate /client/js/* file existing.
+		const dir = path.join(root, "dist/assets");
+		const files = fs
+			.readdirSync(dir)
+			.filter((f) => f.endsWith(".js"))
+			.map((f) => read(`dist/assets/${f}`))
+			.join("\n");
+		expect(files).toContain("__khanqah");
+		expect(files).toContain("/api/setScore");
+		expect(files).toContain("in_result");
+	});
 });
