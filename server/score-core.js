@@ -449,8 +449,16 @@ export async function replayTrace({
 	let instance;
 	try {
 		({ instance } = await WebAssembly.instantiate(wasmBytes));
-	} catch {
-		return { ok: false, reason: "bad-wasm-instantiate" };
+	} catch (err) {
+		// TEMP-DEBUG: V8 message + byte fingerprint until verified save.
+		const message = err instanceof Error ? err.message : String(err);
+		const head = Array.from(wasmBytes.slice(0, 8))
+			.map((b) => b.toString(16).padStart(2, "0"))
+			.join("");
+		return {
+			ok: false,
+			reason: `bad-wasm-instantiate:${wasmBytes.length}:${head}:${message}`,
+		};
 	}
 	const sim = instance.exports;
 	// Same export surface the page loader requires: a stale artifact must
