@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadSim, SIM_LEFT, SIM_RIGHT } from "../client/js/sim-loader.mjs";
-import { CHAR_NIMA, EV_ALIVE, SIM_VERSION, Sim } from "../shared/sim.js";
+import { EV_ALIVE, SIM_VERSION, Sim } from "../shared/sim.js";
 
 // Bit-identity contract between the Rust reference core (wasm/sim) and
 // the pure-JS port (shared/sim.js) the server replays with. The WASM
@@ -92,7 +92,7 @@ describe("sim js/wasm parity", () => {
 		if (!w || typeof w.setCharacter !== "function") {
 			return;
 		}
-		for (const character of [CHAR_NIMA, 1]) {
+		for (const character of [0, 1]) {
 			w.reset(42, 0);
 			w.setCharacter(character);
 			const j = new Sim();
@@ -128,6 +128,40 @@ describe("sim js/wasm parity", () => {
 		expect(j.rejuvenations).toBe(2);
 	});
 
+	it("matches hero play across all eight heroes", async () => {
+		const w = await loadWasm();
+		if (!w || typeof w.setCharacter !== "function") {
+			return;
+		}
+		// Safe-side scripts long enough to trigger flames, flurries,
+		// shields, naps, multipliers, and level-ups, then idle out.
+		for (let hero = 0; hero < 8; hero++) {
+			w.reset(1234 + hero, 0);
+			w.setCharacter(hero);
+			const j = new Sim();
+			j.reset(1234 + hero, 0);
+			j.setCharacter(hero);
+			let t = 0;
+			for (let i = 0; i < 130; i++) {
+				t += 150;
+				const bottom = j.segments()[0] ?? 0;
+				const side = bottom < 0 ? SIM_RIGHT : SIM_LEFT;
+				const evJ = j.chop(side, t);
+				expect(evJ, `hero ${hero} chop ${i}`).toBe(w.chop(side, t));
+				expect(snapshotJs(j), `hero ${hero} chop ${i}`).toEqual(
+					snapshotWasm(w),
+				);
+				if (evJ !== EV_ALIVE) {
+					break;
+				}
+			}
+			expect(j.advanceIdle(t + 9000), `hero ${hero} idle`).toBe(
+				w.advanceIdle(t + 9000),
+			);
+			expect(snapshotJs(j), `hero ${hero} idle`).toEqual(snapshotWasm(w));
+		}
+	});
+
 	it("matches randomized scripts lockstep", async () => {
 		const w = await loadWasm();
 		if (!w || typeof w.setCharacter !== "function") {
@@ -141,15 +175,15 @@ describe("sim js/wasm parity", () => {
 		};
 		for (let round = 0; round < 40; round++) {
 			const seed = rand(2 ** 31) * 65537 + rand(2 ** 16);
-			const character = rand(2);
+			const hero = rand(8);
 			const { lo, hi } = splitSeed(seed);
 			w.reset(lo, hi);
-			w.setCharacter(character);
+			w.setCharacter(hero);
 			const j = new Sim();
 			j.reset(lo, hi);
-			j.setCharacter(character);
+			j.setCharacter(hero);
 			let t = 0;
-			const inputs = 50 + rand(250);
+			const inputs = 100 + rand(300);
 			for (let i = 0; i < inputs; i++) {
 				const roll = rand(10);
 				if (roll < 2) {
