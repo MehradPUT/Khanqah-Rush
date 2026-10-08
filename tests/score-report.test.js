@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { unpackTrace } from "../shared/trace-codec.js";
+import { HERO_FARGOL, unpackTrace } from "../shared/trace-codec.js";
 
 // Real harness for the legacy-page companion (client/js/score-report.mjs).
 // DOM is stubbed lightly (no jsdom): class sets drive in_game/in_result,
@@ -181,5 +181,56 @@ describe("companion score reporter", () => {
 		);
 		expect(trace.chops.map((c) => c.side)).toEqual([1]);
 		expect(win.__khanqah.lastReport).toBe("saved");
+	});
+
+	it("tags the trace with the selected hero", async () => {
+		if (!signerBytes) {
+			return;
+		}
+		win.khanqahGame = { getCharacter: () => "fargol" };
+		setClasses("page_wrap", "ready", "in_game");
+		win.score = 0;
+		tick();
+		keydown("ArrowLeft");
+		win.score = 1;
+		setClasses("page_wrap", "ready", "in_greet", "in_result");
+		tick();
+		await flush();
+
+		const body = lastPostBody();
+		const trace = unpackTrace(
+			Uint8Array.from(Buffer.from(body.trace, "base64")),
+		);
+		expect(trace.hero).toBe(HERO_FARGOL);
+		win.khanqahGame = undefined;
+	});
+
+	it("drops inputs the bundle ignores (flurry, nap, sacrifice)", async () => {
+		if (!signerBytes) {
+			return;
+		}
+		const sent = posts.length;
+		setClasses("page_wrap", "ready", "in_game");
+		win.score = 0;
+		tick();
+		win.khanqahGame = { isAliFlurryActive: () => true };
+		keydown("ArrowLeft");
+		keydown("ArrowRight");
+		tick();
+		expect(win.__khanqah.chops).toBe(0);
+		win.khanqahGame = { isParsaSleeping: () => true };
+		keydown("ArrowLeft");
+		tick();
+		expect(win.__khanqah.chops).toBe(0);
+		win.khanqahGame = { isFargolSacrificeInProgress: () => true };
+		keydown("ArrowLeft");
+		tick();
+		expect(win.__khanqah.chops).toBe(0);
+		win.khanqahGame = undefined;
+		// Scoreless game over posts nothing.
+		setClasses("page_wrap", "ready", "in_greet", "in_result");
+		tick();
+		await flush();
+		expect(posts.length).toBe(sent);
 	});
 });

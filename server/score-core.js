@@ -468,9 +468,10 @@ export async function replayTrace({
 	}
 	const sim = new Sim();
 	sim.reset(trace.seedLo, trace.seedHi);
-	// Trace v1 carries no hero id; pin Nima explicitly (also the sim's
-	// default). Non-Nima rounds replay-mismatch by design until trace v2.
-	sim.setCharacter(0);
+	// Trace v1 carries no hero id and unpacks it as Nima; v2 carries
+	// the companion-observed hero. Other heroes' rounds replay under
+	// their own models (see shared/sim.js).
+	sim.setCharacter(trace.hero);
 	for (const chop of trace.chops) {
 		// sim sides: 1 = LEFT, 2 = RIGHT; trace sides: 0 = LEFT, 1 = RIGHT.
 		const ev = sim.chop(chop.side === 0 ? 1 : 2, chop.t);

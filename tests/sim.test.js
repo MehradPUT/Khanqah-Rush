@@ -82,7 +82,7 @@ describe("deterministic sim", () => {
 			return;
 		}
 		// Safe-side play into the first 15 s window, then idle past the
-		// plain deadline: Nima lives, a non-Nima hero dies.
+		// plain deadline: Nima lives, ability-free Fateme dies.
 		const playToWindow = () => {
 			let t = 0;
 			let ev = EV_ALREADY_DEAD;
@@ -104,7 +104,7 @@ describe("deterministic sim", () => {
 
 		if (typeof sim.setCharacter === "function") {
 			sim.reset(42, 0);
-			sim.setCharacter(1);
+			sim.setCharacter(7);
 			expect(playToWindow()).toMatchObject({ t: 15000, ev: 0 });
 			expect(sim.rejuvenations()).toBe(0);
 			expect(sim.advanceIdle(24000)).toBe(EV_DIED_EXHAUSTION);

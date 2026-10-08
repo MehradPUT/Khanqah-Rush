@@ -9,8 +9,8 @@ import {
 	deriveSessionKey,
 	HERO_ALI,
 	HERO_NIMA,
-	issueLaunchToken,
 	isSessionLive,
+	issueLaunchToken,
 	packTrace,
 	replayTrace,
 	SESSION_TTL_SEC,
@@ -373,7 +373,13 @@ describe("trace codec", () => {
 			}),
 		).toBeNull();
 		expect(
-			packTrace({ hero: HERO_NIMA, seedLo: 1, seedHi: 0, chops: [], endTimeMs: -1 }),
+			packTrace({
+				hero: HERO_NIMA,
+				seedLo: 1,
+				seedHi: 0,
+				chops: [],
+				endTimeMs: -1,
+			}),
 		).toBeNull();
 		expect(
 			packTrace({
@@ -462,6 +468,123 @@ describe("deterministic replay", () => {
 		expect(result.replayed).toMatchObject({ score: 2, alive: false });
 	});
 
+	it("accepts hero rounds played through the shared sim", async () => {
+		// End-to-end hero plumbing: play scripted rounds with the same
+		// JS sim the server replays, then verify the claim verifies.
+		// (Model truth is pinned by Rust unit tests + parity runs.)
+		const { Sim } = await import("../shared/sim.js");
+		const { HERO_AHMAD, HERO_FARGOL } = await import(
+			"../shared/trace-codec.js"
+		);
+		async function playRound(sessionId, hero, script) {
+			const seedHex = await deriveSeed(SECRET, sessionId);
+			const seedBytes = Buffer.from(seedHex, "hex");
+			const view = new DataView(
+				seedBytes.buffer,
+				seedBytes.byteOffset,
+				seedBytes.byteLength,
+			);
+			const seedLo = view.getUint32(0, true);
+			const seedHi = view.getUint32(4, true);
+			const sim = new Sim();
+			sim.reset(seedLo, seedHi);
+			sim.setCharacter(hero);
+			const chops = script(sim);
+			const endTimeMs =
+				chops.length > 0 ? chops[chops.length - 1].t + 400 : 400;
+			const raw = packTrace({ hero, seedLo, seedHi, chops, endTimeMs });
+			const result = await replayTrace({
+				traceB64: Buffer.from(raw).toString("base64"),
+				claimed: {
+					score: sim.score,
+					alive: sim.alive,
+					deathBranch: sim.deathReason() === 1,
+				},
+				serverSecret: SECRET,
+				sessionId,
+			});
+			expect(result.ok).toBe(true);
+			expect(result.replayed).toMatchObject({
+				score: sim.score,
+				alive: sim.alive,
+			});
+			return sim;
+		}
+		// Fargol: colliding play into a sacrifice, gated blackout taps
+		// dropped like the companion drops them, then play to death.
+		await playRound("sid-fargol", HERO_FARGOL, (sim) => {
+			const chops = [];
+			let t = 0;
+			let blackoutUntil = 0;
+			let sacrificed = false;
+			let dead = false;
+			// Trace sides: 0 = LEFT, 1 = RIGHT. Collide whenever the
+			// bottom is nonzero to reach sacrifice quickly.
+			for (let i = 0; i < 60 && !dead; i++) {
+				t += 150;
+				if (t < blackoutUntil) {
+					continue;
+				}
+				const bottom = sim.segments()[0] ?? 0;
+				const traceSide = bottom < 0 ? 0 : 1;
+				const ev = sim.chop(bottom < 0 ? 1 : 2, t);
+				chops.push({ side: traceSide, t });
+				if (!sacrificed && sim.sacrificeUsed) {
+					sacrificed = true;
+					blackoutUntil = t + 880;
+				}
+				if (ev === 1) {
+					dead = true;
+				} else if (ev !== 0) {
+					break;
+				}
+			}
+			expect(sacrificed).toBe(true);
+			expect(dead).toBe(true);
+			return chops;
+		});
+		// Ahmad: safe play to the first shield, absorb a lethal, then
+		// die on the next one.
+		await playRound("sid-ahmad", HERO_AHMAD, (sim) => {
+			const chops = [];
+			let t = 0;
+			const safeTap = () => {
+				t += 150;
+				const bottom = sim.segments()[0] ?? 0;
+				const ev = sim.chop(bottom < 0 ? 2 : 1, t);
+				chops.push({ side: bottom < 0 ? 1 : 0, t });
+				return ev;
+			};
+			for (let i = 0; i < 300 && sim.shields === 0; i++) {
+				if (safeTap() !== 0) {
+					break;
+				}
+			}
+			expect(sim.shields).toBe(1);
+			const lethalTap = () => {
+				t += 150;
+				const bottom = sim.segments()[0] ?? 0;
+				if (bottom === 0) {
+					return safeTap();
+				}
+				const ev = sim.chop(bottom < 0 ? 1 : 2, t);
+				chops.push({ side: bottom < 0 ? 0 : 1, t });
+				return ev;
+			};
+			expect(lethalTap()).toBe(0);
+			expect(sim.shields).toBe(0);
+			expect(sim.alive).toBe(true);
+			let dead = false;
+			for (let i = 0; i < 30 && !dead; i++) {
+				if (lethalTap() === 1) {
+					dead = true;
+				}
+			}
+			expect(dead).toBe(true);
+			return chops;
+		});
+	});
+
 	it("accepts a rejuvenation-assisted round as Nima", async () => {
 		const wasmBytes = await simWasm();
 		if (!wasmBytes) {
@@ -502,7 +625,13 @@ describe("deterministic replay", () => {
 		}
 		expect(chops.length).toBe(100);
 		const endTimeMs = t + 9000;
-		const raw = packTrace({ hero: HERO_NIMA, seedLo, seedHi, chops, endTimeMs });
+		const raw = packTrace({
+			hero: HERO_NIMA,
+			seedLo,
+			seedHi,
+			chops,
+			endTimeMs,
+		});
 		const traceB64 = Buffer.from(raw).toString("base64");
 		const result = await replayTrace({
 			traceB64,
