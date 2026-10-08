@@ -42,9 +42,7 @@ const HERO_BY_NAME = {
 
 /** Bundle hero id string → trace hero byte; unknown defaults to Nima. */
 export function heroIdForName(name) {
-	return (
-		HERO_BY_NAME[String(name ?? "").toLowerCase()] ?? HERO_NIMA
-	);
+	return HERO_BY_NAME[String(name ?? "").toLowerCase()] ?? HERO_NIMA;
 }
 
 export function packTrace({ hero, seedLo, seedHi, chops, endTimeMs }) {
@@ -119,7 +117,8 @@ export function unpackTrace(raw) {
 	o += 4;
 	const count = view.getUint16(o, true);
 	o += 2;
-	const want = 1 + (version === TRACE_VERSION ? 1 : 0) + 4 + 4 + 2 + count * 5 + 4;
+	const want =
+		1 + (version === TRACE_VERSION ? 1 : 0) + 4 + 4 + 2 + count * 5 + 4;
 	if (count > TRACE_MAX_CHOPS || raw.length !== want) {
 		return null;
 	}

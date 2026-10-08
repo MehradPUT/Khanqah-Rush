@@ -15,8 +15,8 @@
  * bot server; otherwise the game stays local-only. Silent by design.
  */
 import {
-	heroIdForName,
 	HERO_NIMA,
+	heroIdForName,
 	packTrace,
 	sha256Hex,
 	splitSeedHex,
@@ -465,12 +465,7 @@ function watch() {
 	}
 	const record = (side) => {
 		try {
-			if (
-				roundStart === null ||
-				!inGame() ||
-				gameOver() ||
-				inputIgnored()
-			) {
+			if (roundStart === null || !inGame() || gameOver() || inputIgnored()) {
 				return;
 			}
 			chops.push({ side, t: Date.now() - roundStart });
@@ -562,8 +557,7 @@ function watch() {
 			}
 			// Prefer live data (observer may not have run yet); fall back
 			// to the frozen round.
-			const src =
-				roundStart !== null ? { chops, roundStart, hero } : pending;
+			const src = roundStart !== null ? { chops, roundStart, hero } : pending;
 			if (
 				score > 0 &&
 				gameOver() &&
