@@ -28,10 +28,17 @@ const POLL_MS = 500;
 const HEX_64 = /^[0-9a-f]{64}$/;
 const HEX_16 = /^[0-9a-f]{16}$/;
 
-// Temporary debug instrumentation (remove before merge): traces the
-// companion's view of round state so a playtest can report exactly
-// where reporting stalls. Never logs secrets (key/token/tag/trace).
-const DEBUG = true;
+// Debug instrumentation is deploy-gated: players get a silent
+// companion (no badge, no console output) while developers append
+// `&dbg=1` to the game URL for the full trace. Never logs secrets
+// (key/token/tag/trace) in either mode.
+const DEBUG = (() => {
+	try {
+		return new URLSearchParams(window.location.search).has("dbg");
+	} catch {
+		return false;
+	}
+})();
 
 function dlog(...args) {
 	try {
@@ -205,6 +212,9 @@ function badge() {
 let badgeTimer = 0;
 
 function showBadge(text, background, sticky = false) {
+	if (!DEBUG) {
+		return;
+	}
 	try {
 		const el = badge();
 		el.textContent = text;
@@ -225,6 +235,9 @@ function showBadge(text, background, sticky = false) {
 }
 
 function hideBadge() {
+	if (!DEBUG) {
+		return;
+	}
 	try {
 		const el = document.getElementById(BADGE_ID);
 		if (el) {

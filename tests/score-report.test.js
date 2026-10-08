@@ -55,11 +55,14 @@ describe("companion score reporter", () => {
 		posts = [];
 		win = {
 			location: {
+				// dbg=1 enables the badge + debug logs (players get
+				// neither by default).
 				search:
 					"?lt=tok&sid=sid-harness&sk=" +
 					"ab".repeat(32) +
 					"&seed=" +
-					"cd".repeat(8),
+					"cd".repeat(8) +
+					"&dbg=1",
 			},
 			score: 0,
 			addEventListener: (type, fn) => {
