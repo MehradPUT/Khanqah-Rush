@@ -23,7 +23,8 @@ export function packTrace({ seedLo, seedHi, chops, endTimeMs }) {
 		!Number.isInteger(seedHi) ||
 		!Array.isArray(chops) ||
 		chops.length > TRACE_MAX_CHOPS ||
-		!Number.isInteger(endTimeMs)
+		!Number.isInteger(endTimeMs) ||
+		endTimeMs < 0
 	) {
 		return null;
 	}
@@ -128,8 +129,14 @@ export function traceFromB64(str) {
 	return b64Decode(str);
 }
 
-/** Hex SHA-256 over bytes (WebCrypto; works on node, browsers, Workers). */
+/**
+ * Hex SHA-256 over bytes (WebCrypto; works on node, browsers, Workers).
+ * Null when subtle crypto is unavailable (plain HTTP, old WebViews).
+ */
 export async function sha256Hex(bytes) {
+	if (typeof globalThis.crypto === "undefined" || !globalThis.crypto.subtle) {
+		return null;
+	}
 	const digest = await crypto.subtle.digest("SHA-256", bytes);
 	return Array.from(new Uint8Array(digest))
 		.map((b) => b.toString(16).padStart(2, "0"))

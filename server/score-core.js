@@ -118,6 +118,9 @@ export async function issueLaunchToken(
 	if (typeof sessionId !== "string" || sessionId.length === 0) {
 		throw new Error("sessionId is required");
 	}
+	if (!Number.isInteger(userId)) {
+		throw new Error("userId is required");
+	}
 	const payload = {
 		u: userId,
 		exp: atSec + ttlSec,
@@ -189,6 +192,7 @@ export function isSessionLive(launch, sessionId, atSec = nowSec()) {
 		!!launch &&
 		launch.s === sessionId &&
 		Number.isInteger(launch.sat) &&
+		atSec >= launch.sat &&
 		atSec - launch.sat < SESSION_TTL_SEC
 	);
 }
@@ -305,6 +309,9 @@ export async function verifyEnvelope(
 	if (!traceBytes || traceBytes.length > TRACE_MAX_BYTES) {
 		return { ok: false, reason: "bad-trace" };
 	}
+	if (!unpackTrace(traceBytes)) {
+		return { ok: false, reason: "bad-trace" };
+	}
 	const actualHash = toHex(
 		new Uint8Array(await crypto.subtle.digest("SHA-256", traceBytes)),
 	);
@@ -371,6 +378,7 @@ export function buildSetGameScoreCall({
 	};
 }
 
+import { SIM_REQUIRED_EXPORTS } from "../client/js/sim-loader.mjs";
 // ---------------------------------------------------------------------------
 // Trace codec lives in shared/trace-codec.js (single source for page,
 // server, and tests). Imported for internal use and re-exported so
@@ -427,7 +435,11 @@ export async function replayTrace({
 	}
 	const seedHex = await deriveSeed(serverSecret, sessionId);
 	const seedBytes = fromHex(seedHex);
-	const seedView = new DataView(seedBytes.buffer);
+	const seedView = new DataView(
+		seedBytes.buffer,
+		seedBytes.byteOffset,
+		seedBytes.byteLength,
+	);
 	if (
 		seedView.getUint32(0, true) !== trace.seedLo >>> 0 ||
 		seedView.getUint32(4, true) !== trace.seedHi >>> 0
@@ -441,7 +453,13 @@ export async function replayTrace({
 		return { ok: false, reason: "bad-trace" };
 	}
 	const sim = instance.exports;
-	if (typeof sim.sim_version !== "function" || sim.sim_version() !== 2) {
+	// Same export surface the page loader requires: a stale artifact must
+	// fail cleanly as bad-trace, never throw mid-replay.
+	if (
+		typeof sim.sim_version !== "function" ||
+		sim.sim_version() !== 2 ||
+		SIM_REQUIRED_EXPORTS.some((k) => sim[k] === undefined)
+	) {
 		return { ok: false, reason: "bad-trace" };
 	}
 	const seed = (BigInt(trace.seedHi >>> 0) << 32n) | BigInt(trace.seedLo >>> 0);

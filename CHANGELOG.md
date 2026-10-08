@@ -65,6 +65,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Companion records inputs in the capture phase (before the bundle's
+  handlers), so even a synchronously lethal chop lands in the trace;
+  touch buttons observed at window level. Reports retry once on
+  transport failure (server verdicts never repost).
+- WASM loaders bind `fetch` (detached references throw Illegal
+  invocation on some browsers); signer memory access fails soft;
+  missing subtle crypto reports distinctly.
+- Score verification fails closed without a secret, guards missing
+  bindings/game name, checks the Telegram write verdict, validates the
+  replay artifact surface, and rejects future-dated sessions and
+  negative trace timestamps. Reference node adapter re-synced.
 - Sessions validate statelessly from the signed launch token (session
   id + mint time ride in the payload): the old in-memory "current
   session" check failed across Workers isolates, so every score died as

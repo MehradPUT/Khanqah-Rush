@@ -49,11 +49,11 @@ async function main() {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(params),
 		});
-		return res.json();
+		return res.json().catch(() => ({}));
 	}
 
 	function readJson(req) {
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve) => {
 			let raw = "";
 			req.on("data", (chunk) => {
 				raw += chunk;
@@ -61,11 +61,11 @@ async function main() {
 			req.on("end", () => {
 				try {
 					resolve(raw ? JSON.parse(raw) : {});
-				} catch (err) {
-					reject(err);
+				} catch {
+					resolve({});
 				}
 			});
-			req.on("error", reject);
+			req.on("error", () => resolve({}));
 		});
 	}
 
@@ -81,15 +81,26 @@ async function main() {
 			}
 
 			if (req.method === "POST" && req.url === "/telegram-webhook") {
-				if (
-					WEBHOOK_SECRET &&
-					req.headers["x-telegram-bot-api-secret-token"] !== WEBHOOK_SECRET
-				) {
-					return json(res, 401, { ok: false });
+				if (WEBHOOK_SECRET) {
+					// Timing-safe compare without node:crypto (Workers-safe).
+					const got = req.headers["x-telegram-bot-api-secret-token"] ?? "";
+					const a = Buffer.from(got);
+					const b = Buffer.from(WEBHOOK_SECRET);
+					let diff = a.length === b.length ? 0 : 1;
+					const n = Math.max(a.length, b.length);
+					for (let i = 0; i < n; i++) {
+						diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+					}
+					if (diff !== 0) {
+						return json(res, 401, { ok: false });
+					}
 				}
 				const update = await readJson(req);
 				const query = update.callback_query;
-				if (query?.game_short_name === GAME_SHORT_NAME) {
+				if (!GAME_SHORT_NAME || query?.game_short_name !== GAME_SHORT_NAME) {
+					return json(res, 200, { ok: true });
+				}
+				{
 					let url = GAME_URL;
 					const userId = query.from?.id;
 					const chatId = query.message?.chat?.id;
@@ -141,6 +152,11 @@ async function main() {
 					console.warn(`[example] score rejected: ${reason}`);
 					return json(res, 200, { ok: true, recorded: false });
 				};
+				// Fail closed: an empty secret would verify everything under
+				// the empty HMAC key.
+				if (typeof SERVER_SECRET !== "string" || SERVER_SECRET.length === 0) {
+					return deny("no-secret");
+				}
 				const launch = await core.verifyLaunchToken(body.lt, SERVER_SECRET);
 				if (!launch) {
 					return deny("bad-launch");
@@ -192,8 +208,14 @@ async function main() {
 						inlineMessageId: launch.i,
 						score: body.score,
 					});
-					await telegram(call.method, call.params);
-					return json(res, 200, { ok: true, recorded: true });
+					// Without force, Telegram keeps the higher board score and
+					// answers ok:false for a lower one — only a real write
+					// counts.
+					const written = await telegram(call.method, call.params);
+					if (written?.ok) {
+						return json(res, 200, { ok: true, recorded: true });
+					}
+					return deny("telegram-rejected");
 				}
 				return deny("no-bot-token");
 			}

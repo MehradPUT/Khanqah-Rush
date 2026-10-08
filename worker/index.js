@@ -84,6 +84,11 @@ function serverSecret(env) {
 	return env.SERVER_SECRET || env.TELEGRAM_BOT_TOKEN;
 }
 
+function requireSecret(env) {
+	const secret = serverSecret(env);
+	return typeof secret === "string" && secret.length > 0 ? secret : null;
+}
+
 async function handleUpdate(update, req, env) {
 	if (env.WEBHOOK_SECRET) {
 		const got = req.headers.get("x-telegram-bot-api-secret-token");
@@ -141,7 +146,10 @@ async function handleUpdate(update, req, env) {
 		return json({ ok: true });
 	}
 	const query = update.callback_query;
-	if (query?.game_short_name === env.GAME_SHORT_NAME) {
+	if (!env.GAME_SHORT_NAME || query?.game_short_name !== env.GAME_SHORT_NAME) {
+		return json({ ok: true });
+	}
+	{
 		const origin = new URL(req.url).origin;
 		const gameUrl = env.GAME_URL || origin;
 		let url = gameUrl;
@@ -157,17 +165,15 @@ async function handleUpdate(update, req, env) {
 					? { userId, inlineMessageId }
 					: null);
 		if (launchIds) {
+			const secret = requireSecret(env);
 			const sessionId = randomSessionId();
 			// Registry only rate-limits issuance (best-effort per isolate);
 			// the session itself is token-bound (isSessionLive at score
 			// time), so scoring works on any isolate.
-			if (sessions.register(userId)) {
-				const lt = await issueLaunchToken(
-					{ ...launchIds, sessionId },
-					serverSecret(env),
-				);
-				const sk = toHex(await deriveSessionKey(serverSecret(env), sessionId));
-				const seed = await deriveSeed(serverSecret(env), sessionId);
+			if (secret && sessions.register(userId)) {
+				const lt = await issueLaunchToken({ ...launchIds, sessionId }, secret);
+				const sk = toHex(await deriveSessionKey(secret, sessionId));
+				const seed = await deriveSeed(secret, sessionId);
 				const sep = gameUrl.includes("?") ? "&" : "?";
 				url =
 					`${gameUrl}${sep}lt=${encodeURIComponent(lt)}` +
@@ -194,7 +200,13 @@ async function handleSetScore(req, env) {
 		console.warn(`[worker] score rejected: ${reason}`);
 		return json({ ok: true, recorded: false, debugReason: reason });
 	};
-	const launch = await verifyLaunchToken(body.lt, serverSecret(env));
+	// Fail closed: an empty secret would verify everything under the
+	// empty HMAC key.
+	const secret = requireSecret(env);
+	if (!secret) {
+		return deny("no-secret");
+	}
+	const launch = await verifyLaunchToken(body.lt, secret);
 	if (!launch) {
 		return deny("bad-launch");
 	}
@@ -212,7 +224,7 @@ async function handleSetScore(req, env) {
 			trace: body.trace,
 			traceHash: body.traceHash,
 		},
-		{ serverSecret: serverSecret(env), nonceStore },
+		{ serverSecret: secret, nonceStore },
 	);
 	if (!verified.ok) {
 		return deny(`envelope-${verified.reason}`);
@@ -233,7 +245,7 @@ async function handleSetScore(req, env) {
 					score: body.score,
 					alive: false,
 				},
-				serverSecret: serverSecret(env),
+				serverSecret: secret,
 				sessionId: body.sid,
 			})
 		: { ok: false, reason: "no-wasm" };
@@ -248,8 +260,13 @@ async function handleSetScore(req, env) {
 			inlineMessageId: launch.i,
 			score: body.score,
 		});
-		await telegram(env, call.method, call.params);
-		return json({ ok: true, recorded: true });
+		// Without force, Telegram keeps the higher board score and
+		// answers ok:false for a lower one — only a real write counts.
+		const written = await telegram(env, call.method, call.params);
+		if (written?.ok) {
+			return json({ ok: true, recorded: true });
+		}
+		return deny("telegram-rejected");
 	}
 	return deny("no-bot-token");
 }
@@ -289,6 +306,9 @@ export default {
 			// static assets (which 500s on POST).
 			await req.text().catch(() => "");
 			return json({ ok: true, scores: [] });
+		}
+		if (!env.ASSETS) {
+			return json({ ok: false }, 500);
 		}
 		return env.ASSETS.fetch(req);
 	},
