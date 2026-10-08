@@ -263,7 +263,19 @@ export default {
 			return handleUpdate(update, req, env);
 		}
 		if (req.method === "POST" && url.pathname === "/api/setScore") {
-			return handleSetScore(req, env);
+			// TEMP-DEBUG: surface the crash line until the first verified
+			// save; remove together with debugReason.
+			try {
+				return await handleSetScore(req, env);
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				console.error(`[worker] setScore crashed: ${message}`);
+				return json({
+					ok: true,
+					recorded: false,
+					debugReason: `crash:${message}`,
+				});
+			}
 		}
 		if (req.method === "POST" && url.pathname === "/api/getHighScores") {
 			// Legacy bundle board fetch. No per-chat board is tracked
