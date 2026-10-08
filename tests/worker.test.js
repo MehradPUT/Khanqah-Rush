@@ -3,7 +3,9 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import {
+	deriveSeed,
 	deriveSessionKey,
+	issueLaunchToken,
 	packTrace,
 	replayTrace,
 	splitSeedHex,
@@ -368,6 +370,50 @@ describe("worker entry", () => {
 					.length,
 			).toBe(1);
 			expect(telegramMock.mock.calls.length).toBe(callsBefore + 1);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("validates token-bound sessions without shared memory", async () => {
+		// Mint straight from score-core: this sid never touches the
+		// worker's registry, proving scoring works on a cold isolate.
+		const sid = `sid-stateless-${Date.now()}`;
+		const lt = await issueLaunchToken(
+			{ userId: 7, chatId: 8, messageId: 9, sessionId: sid },
+			"test-secret",
+		);
+		const key = await deriveSessionKey("test-secret", sid);
+		const seedHex = await deriveSeed("test-secret", sid);
+		const telegramMock = vi.fn(
+			async () => new Response(JSON.stringify({ ok: true })),
+		);
+		vi.stubGlobal("fetch", telegramMock);
+		try {
+			const played = await submitReplayed({ lt, sid, key, seedHex });
+			expect(played).not.toBeNull();
+			expect(await played.response.json()).toMatchObject({
+				ok: true,
+				recorded: true,
+			});
+
+			// A sid that is not the token-bound one is stale, even when
+			// the envelope itself is correctly signed for it.
+			const other = await signedBody({
+				lt,
+				sid: "sid-impostor",
+				key,
+				score: 1,
+				durationSec: 5,
+				seedHex,
+			});
+			const res = await worker.fetch(post("/api/setScore", other), {
+				...ENV,
+			});
+			expect(await res.json()).toMatchObject({
+				ok: true,
+				recorded: false,
+			});
 		} finally {
 			vi.unstubAllGlobals();
 		}

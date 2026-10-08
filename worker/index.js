@@ -4,9 +4,11 @@
  * Same contract as server/example.cjs (see docs/DEPLOYMENT.md Part D), but
  * running on the edge next to the static game: webhook + score API handled
  * here, everything else falls through to the Workers Static Assets binding.
- * Secrets arrive via env (wrangler secret put); stateless per isolate —
- * the nonce store is in-memory, so cross-isolate replays are a documented
- * limitation until a shared store exists.
+ * Secrets arrive via env (wrangler secret put); sessions validate
+ * statelessly from the signed launch token (no shared memory between
+ * isolates). The nonce store stays in-memory, so cross-isolate replays
+ * of the same envelope are a documented limitation until a shared store
+ * exists (replays gain nothing: the tag binds the score).
  */
 import {
 	buildSetGameScoreCall,
@@ -15,6 +17,7 @@ import {
 	createSessionRegistry,
 	deriveSeed,
 	deriveSessionKey,
+	isSessionLive,
 	issueLaunchToken,
 	replayTrace,
 	verifyEnvelope,
@@ -150,8 +153,14 @@ async function handleUpdate(update, req, env) {
 					: null);
 		if (launchIds) {
 			const sessionId = randomSessionId();
-			if (sessions.register(userId, sessionId)) {
-				const lt = await issueLaunchToken(launchIds, serverSecret(env));
+			// Registry only rate-limits issuance (best-effort per isolate);
+			// the session itself is token-bound (isSessionLive at score
+			// time), so scoring works on any isolate.
+			if (sessions.register(userId)) {
+				const lt = await issueLaunchToken(
+					{ ...launchIds, sessionId },
+					serverSecret(env),
+				);
 				const sk = toHex(await deriveSessionKey(serverSecret(env), sessionId));
 				const seed = await deriveSeed(serverSecret(env), sessionId);
 				const sep = gameUrl.includes("?") ? "&" : "?";
@@ -184,7 +193,7 @@ async function handleSetScore(req, env) {
 	if (!launch) {
 		return deny("bad-launch");
 	}
-	if (!sessions.isCurrent(launch.u, body.sid)) {
+	if (!isSessionLive(launch, body.sid)) {
 		return deny("stale-session");
 	}
 	const verified = await verifyEnvelope(

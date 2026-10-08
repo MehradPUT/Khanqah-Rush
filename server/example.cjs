@@ -107,9 +107,14 @@ async function main() {
 						// Mint a launch-bound session: token + session key travel in
 						// the answered URL (over TLS). Works for message and inline
 						// launches alike. Rate-limited launches get the plain URL.
+						// The session id is token-bound (isSessionLive at score
+						// time), so scoring needs no shared memory.
 						const sessionId = randomBytes(16).toString("hex");
-						if (sessions.register(userId, sessionId)) {
-							const lt = await core.issueLaunchToken(launchIds, SERVER_SECRET);
+						if (sessions.register(userId)) {
+							const lt = await core.issueLaunchToken(
+								{ ...launchIds, sessionId },
+								SERVER_SECRET,
+							);
 							const sk = Buffer.from(
 								await core.deriveSessionKey(SERVER_SECRET, sessionId),
 							).toString("hex");
@@ -140,7 +145,7 @@ async function main() {
 				if (!launch) {
 					return deny("bad-launch");
 				}
-				if (!sessions.isCurrent(launch.u, body.sid)) {
+				if (!core.isSessionLive(launch, body.sid)) {
 					return deny("stale-session");
 				}
 				const verified = await core.verifyEnvelope(

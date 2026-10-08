@@ -65,7 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Companion froze finished rounds for reporting instead of wiping them:
+- Sessions validate statelessly from the signed launch token (session
+  id + mint time ride in the payload): the old in-memory "current
+  session" check failed across Workers isolates, so every score died as
+  `stale-session`. The registry now only rate-limits issuance.
+- Companion freezes finished rounds for reporting instead of wiping them:
   the bundle drops `in_game` and raises `in_result` in one synchronous
   block, so the observer destroyed each trace before the poll could send
   it and every score went unrecorded.

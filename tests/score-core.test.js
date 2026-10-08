@@ -7,9 +7,11 @@ import {
 	createSessionRegistry,
 	deriveSeed,
 	deriveSessionKey,
+	isSessionLive,
 	issueLaunchToken,
 	packTrace,
 	replayTrace,
+	SESSION_TTL_SEC,
 	sha256Hex,
 	timingSafeEqual,
 	traceFromB64,
@@ -62,9 +64,9 @@ async function validEnvelope(overrides = {}) {
 }
 
 describe("launch tokens", () => {
-	it("round-trips message and inline tokens", async () => {
+	it("round-trips message and inline tokens with the bound session", async () => {
 		const token = await issueLaunchToken(
-			{ userId: 7, chatId: 8, messageId: 9 },
+			{ userId: 7, chatId: 8, messageId: 9, sessionId: "sid-1" },
 			SECRET,
 			NOW,
 		);
@@ -72,29 +74,35 @@ describe("launch tokens", () => {
 			u: 7,
 			c: 8,
 			m: 9,
+			s: "sid-1",
+			sat: NOW,
 		});
 
 		const inline = await issueLaunchToken(
-			{ userId: 7, inlineMessageId: "AAQAAxkBAAI" },
+			{ userId: 7, inlineMessageId: "AAQAAxkBAAI", sessionId: "sid-2" },
 			SECRET,
 			NOW,
 		);
 		expect(await verifyLaunchToken(inline, SECRET, NOW + 10)).toMatchObject({
 			u: 7,
 			i: "AAQAAxkBAAI",
+			s: "sid-2",
 		});
 
 		const emptyInline = await issueLaunchToken(
-			{ userId: 7, inlineMessageId: "" },
+			{ userId: 7, inlineMessageId: "", sessionId: "sid-3" },
 			SECRET,
 			NOW,
 		);
 		expect(await verifyLaunchToken(emptyInline, SECRET, NOW + 10)).toBeNull();
+		await expect(
+			issueLaunchToken({ userId: 7, chatId: 8, messageId: 9 }, SECRET, NOW),
+		).rejects.toThrow("sessionId is required");
 	});
 
 	it("rejects tampered, expired, wrong-secret, and malformed tokens", async () => {
 		const token = await issueLaunchToken(
-			{ userId: 7, chatId: 8, messageId: 9, ttlSec: 60 },
+			{ userId: 7, chatId: 8, messageId: 9, sessionId: "s", ttlSec: 60 },
 			SECRET,
 			NOW,
 		);
@@ -104,6 +112,24 @@ describe("launch tokens", () => {
 		expect(await verifyLaunchToken(token, "wrong", NOW)).toBeNull();
 		expect(await verifyLaunchToken("garbage", SECRET, NOW)).toBeNull();
 		expect(await verifyLaunchToken(null, SECRET, NOW)).toBeNull();
+	});
+
+	it("checks token-bound sessions statelessly", async () => {
+		const launch = await verifyLaunchToken(
+			await issueLaunchToken(
+				{ userId: 7, chatId: 8, messageId: 9, sessionId: "sid-live" },
+				SECRET,
+				NOW,
+			),
+			SECRET,
+			NOW,
+		);
+		expect(isSessionLive(launch, "sid-live", NOW + 10)).toBe(true);
+		expect(isSessionLive(launch, "sid-other", NOW + 10)).toBe(false);
+		expect(isSessionLive(launch, "sid-live", NOW + SESSION_TTL_SEC)).toBe(
+			false,
+		);
+		expect(isSessionLive(null, "sid-live", NOW)).toBe(false);
 	});
 });
 
@@ -479,14 +505,11 @@ describe("deterministic replay", () => {
 });
 
 describe("session registry", () => {
-	it("keeps only the latest session and rate-limits issuance", () => {
+	it("rate-limits issuance per user", () => {
 		const reg = createSessionRegistry({ maxLaunchesPerHour: 2 });
-		expect(reg.register(7, "s1", NOW)).toBe(true);
-		expect(reg.isCurrent(7, "s1", NOW + 10)).toBe(true);
-		expect(reg.register(7, "s2", NOW + 20)).toBe(true);
-		expect(reg.isCurrent(7, "s1", NOW + 30)).toBe(false);
-		expect(reg.isCurrent(7, "s2", NOW + 30)).toBe(true);
-		expect(reg.register(7, "s3", NOW + 40)).toBe(false);
-		expect(reg.isCurrent(9, "s9", NOW)).toBe(false);
+		expect(reg.register(7, NOW)).toBe(true);
+		expect(reg.register(7, NOW + 20)).toBe(true);
+		expect(reg.register(7, NOW + 40)).toBe(false);
+		expect(reg.register(9, NOW)).toBe(true);
 	});
 });

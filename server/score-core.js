@@ -14,6 +14,10 @@ export const ENVELOPE_VERSION = "khanqah-v2";
 export const TIMESTAMP_WINDOW_SEC = 60;
 export const NONCE_TTL_SEC = 180;
 export const MAX_CPS = 10;
+// Session lifetime after mint, enforced statelessly from the launch
+// token's `sat` claim (no server memory: Workers isolates don't share
+// any, so an in-memory "current session" check fails across isolates).
+export const SESSION_TTL_SEC = 3600;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -101,15 +105,24 @@ function nowSec() {
  * the client echoes it back with every score post. Regular launches carry
  * user/chat/message ids; inline launches carry the inline message id
  * instead (there is no chat message to bind to).
+ *
+ * The session id rides inside the signed payload (`s`, minted at `sat`)
+ * so score posts validate statelessly — no shared store needed across
+ * isolates. sessionId is required; old tokens without it verify as null.
  */
 export async function issueLaunchToken(
-	{ userId, chatId, messageId, inlineMessageId, ttlSec = 3600 },
+	{ userId, chatId, messageId, inlineMessageId, sessionId, ttlSec = 3600 },
 	serverSecret,
 	atSec = nowSec(),
 ) {
+	if (typeof sessionId !== "string" || sessionId.length === 0) {
+		throw new Error("sessionId is required");
+	}
 	const payload = {
 		u: userId,
 		exp: atSec + ttlSec,
+		s: sessionId,
+		sat: atSec,
 	};
 	if (typeof inlineMessageId === "string" && inlineMessageId.length > 0) {
 		payload.i = inlineMessageId;
@@ -153,6 +166,9 @@ export async function verifyLaunchToken(token, serverSecret, atSec = nowSec()) {
 		typeof payload.exp !== "number" ||
 		payload.exp < atSec ||
 		!Number.isInteger(payload.u) ||
+		typeof payload.s !== "string" ||
+		payload.s.length === 0 ||
+		!Number.isInteger(payload.sat) ||
 		!(
 			(typeof payload.i === "string" && payload.i.length > 0) ||
 			(Number.isInteger(payload.c) && Number.isInteger(payload.m))
@@ -161,6 +177,20 @@ export async function verifyLaunchToken(token, serverSecret, atSec = nowSec()) {
 		return null;
 	}
 	return payload;
+}
+
+/**
+ * Stateless session check: the posted sid must be the token-bound one
+ * and the session must be younger than SESSION_TTL_SEC. Pure function —
+ * safe to call on any isolate.
+ */
+export function isSessionLive(launch, sessionId, atSec = nowSec()) {
+	return (
+		!!launch &&
+		launch.s === sessionId &&
+		Number.isInteger(launch.sat) &&
+		atSec - launch.sat < SESSION_TTL_SEC
+	);
 }
 
 /** Derive a 32-byte per-session signing key. Client receives it at launch. */
@@ -444,20 +474,20 @@ export async function replayTrace({
 }
 
 /**
- * Single-active-session registry with issuance rate limiting.
- * Sessions die with their launch tokens (TTL); a new launch for the same
- * user replaces the old one, so grinding many seeds in parallel is
- * pointless — only the latest session verifies. In-memory: single isolate
- * only, like the nonce store.
+ * Issuance rate limiter (launches per user per hour). Best-effort and
+ * per-isolate by nature — it only decides whether a Play press gets a
+ * session URL, never whether a score records. Session validity itself
+ * is stateless (see isSessionLive), so scoring works on any isolate.
+ * No single-active-session eviction: every minted session stays valid
+ * for SESSION_TTL_SEC. Parallel seed-shopping costs a fully played round
+ * per seed while replay still binds each score to real inputs, so the
+ * residual is accepted.
  */
-export function createSessionRegistry({
-	maxLaunchesPerHour = 30,
-	sessionTtlSec = 3600,
-} = {}) {
-	// userId -> { sessionId, issuedAt, launches: [atSec...] }
+export function createSessionRegistry({ maxLaunchesPerHour = 30 } = {}) {
+	// userId -> { launches: [atSec...] }
 	const users = new Map();
 	return {
-		register(userId, sessionId, atSec = nowSec()) {
+		register(userId, atSec = nowSec()) {
 			let entry = users.get(userId);
 			if (!entry) {
 				entry = { launches: [] };
@@ -468,17 +498,7 @@ export function createSessionRegistry({
 				return false;
 			}
 			entry.launches.push(atSec);
-			entry.sessionId = sessionId;
-			entry.issuedAt = atSec;
 			return true;
-		},
-		isCurrent(userId, sessionId, atSec = nowSec()) {
-			const entry = users.get(userId);
-			return (
-				!!entry &&
-				entry.sessionId === sessionId &&
-				atSec - entry.issuedAt < sessionTtlSec
-			);
 		},
 	};
 }
