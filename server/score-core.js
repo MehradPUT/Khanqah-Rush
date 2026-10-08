@@ -450,17 +450,18 @@ export async function replayTrace({
 	try {
 		({ instance } = await WebAssembly.instantiate(wasmBytes));
 	} catch {
-		return { ok: false, reason: "bad-trace" };
+		return { ok: false, reason: "bad-wasm-instantiate" };
 	}
 	const sim = instance.exports;
 	// Same export surface the page loader requires: a stale artifact must
-	// fail cleanly as bad-trace, never throw mid-replay.
-	if (
-		typeof sim.sim_version !== "function" ||
-		sim.sim_version() !== 2 ||
-		SIM_REQUIRED_EXPORTS.some((k) => sim[k] === undefined)
-	) {
-		return { ok: false, reason: "bad-trace" };
+	// fail cleanly, never throw mid-replay. TEMP-DEBUG: distinct reasons
+	// until the first verified save.
+	if (typeof sim.sim_version !== "function" || sim.sim_version() !== 2) {
+		return { ok: false, reason: "bad-wasm-version" };
+	}
+	const missing = SIM_REQUIRED_EXPORTS.filter((k) => sim[k] === undefined);
+	if (missing.length > 0) {
+		return { ok: false, reason: `bad-wasm-exports:${missing.join(",")}` };
 	}
 	const seed = (BigInt(trace.seedHi >>> 0) << 32n) | BigInt(trace.seedLo >>> 0);
 	sim.sim_reset(Number(seed & 0xffffffffn), Number(seed >> 32n));
