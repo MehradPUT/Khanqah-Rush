@@ -378,8 +378,7 @@ export function buildSetGameScoreCall({
 	};
 }
 
-import { SIM_REQUIRED_EXPORTS } from "../client/js/sim-loader.mjs";
-// ---------------------------------------------------------------------------
+import { EV_ALIVE, Sim } from "../shared/sim.js"; // ---------------------------------------------------------------------------
 // Trace codec lives in shared/trace-codec.js (single source for page,
 // server, and tests). Imported for internal use and re-exported so
 // existing importers keep working.
@@ -412,15 +411,15 @@ export {
  * Replay a trace through the deterministic sim and compare with the claim.
  * The seed is re-derived from (serverSecret, sessionId) and must match the
  * trace-embedded seed — clients cannot shop for favorable seeds.
- * wasmBytes: Uint8Array of the sim.wasm module bytes (caller reads from
- * disk on node, self-fetches on Workers; the compiled module is cached by
- * the caller if replays are frequent).
+ * The sim is pure JS (shared/sim.js, bit-identical to the Rust reference
+ * by tests/sim-parity.test.js): the Workers edge V8 refuses to compile
+ * WASM ("code generation disallowed by embedder"), so replay keeps zero
+ * engine dependencies and works on any isolate with no artifact fetch.
  * Returns { ok: true, replayed } or { ok: false, reason }.
  * Reasons: bad-trace | bad-seed | no-outcome-match.
  */
 export async function replayTrace({
 	traceB64,
-	wasmBytes,
 	claimed,
 	serverSecret,
 	sessionId,
@@ -446,51 +445,24 @@ export async function replayTrace({
 	) {
 		return { ok: false, reason: "bad-seed" };
 	}
-	let instance;
-	try {
-		({ instance } = await WebAssembly.instantiate(wasmBytes));
-	} catch (err) {
-		// TEMP-DEBUG: V8 message + byte fingerprint until verified save.
-		const message = err instanceof Error ? err.message : String(err);
-		const head = Array.from(wasmBytes.slice(0, 8))
-			.map((b) => b.toString(16).padStart(2, "0"))
-			.join("");
-		return {
-			ok: false,
-			reason: `bad-wasm-instantiate:${wasmBytes.length}:${head}:${message}`,
-		};
-	}
-	const sim = instance.exports;
-	// Same export surface the page loader requires: a stale artifact must
-	// fail cleanly, never throw mid-replay. TEMP-DEBUG: distinct reasons
-	// until the first verified save.
-	if (typeof sim.sim_version !== "function" || sim.sim_version() !== 2) {
-		return { ok: false, reason: "bad-wasm-version" };
-	}
-	const missing = SIM_REQUIRED_EXPORTS.filter((k) => sim[k] === undefined);
-	if (missing.length > 0) {
-		return { ok: false, reason: `bad-wasm-exports:${missing.join(",")}` };
-	}
-	const seed = (BigInt(trace.seedHi >>> 0) << 32n) | BigInt(trace.seedLo >>> 0);
-	sim.sim_reset(Number(seed & 0xffffffffn), Number(seed >> 32n));
+	const sim = new Sim();
+	sim.reset(trace.seedLo, trace.seedHi);
 	// Trace v1 carries no hero id; pin Nima explicitly (also the sim's
 	// default). Non-Nima rounds replay-mismatch by design until trace v2.
-	if (typeof sim.sim_set_character === "function") {
-		sim.sim_set_character(0);
-	}
+	sim.setCharacter(0);
 	for (const chop of trace.chops) {
 		// sim sides: 1 = LEFT, 2 = RIGHT; trace sides: 0 = LEFT, 1 = RIGHT.
-		const ev = sim.sim_chop(chop.side === 0 ? 1 : 2, chop.t);
-		if (ev !== 0) {
+		const ev = sim.chop(chop.side === 0 ? 1 : 2, chop.t);
+		if (ev !== EV_ALIVE) {
 			break;
 		}
 	}
-	sim.sim_advance_idle(trace.endTimeMs);
+	sim.advanceIdle(trace.endTimeMs);
 	const replayed = {
-		score: sim.sim_score(),
-		alive: sim.sim_alive() === 1,
-		deathBranch: sim.sim_death_reason() === 1,
-		survivalMs: Number(sim.sim_survival_ms()),
+		score: sim.score,
+		alive: sim.alive,
+		deathBranch: sim.deathReason() === 1,
+		survivalMs: sim.survivalMs,
 	};
 	const match =
 		replayed.score === claimed.score && replayed.alive === claimed.alive;

@@ -28,20 +28,6 @@ async function main() {
 	);
 	const nonceStore = core.createMemoryNonceStore();
 	const sessions = core.createSessionRegistry();
-	const { readFile } = await import("node:fs/promises");
-	let simWasmBytes = null;
-	async function getSimWasm() {
-		if (!simWasmBytes) {
-			try {
-				simWasmBytes = await readFile(
-					join(__dirname, "..", "public", "wasm", "sim.wasm"),
-				);
-			} catch {
-				return null;
-			}
-		}
-		return simWasmBytes;
-	}
 
 	async function telegram(method, params) {
 		const res = await fetch(`${TELEGRAM_API}/${method}`, {
@@ -187,16 +173,12 @@ async function main() {
 				if (!plausible.ok) {
 					return deny(`plausibility-${plausible.reason}`);
 				}
-				const wasmBytes = await getSimWasm();
-				const replayed = wasmBytes
-					? await core.replayTrace({
-							traceB64: body.trace,
-							wasmBytes,
-							claimed: { score: body.score, alive: false },
-							serverSecret: SERVER_SECRET,
-							sessionId: body.sid,
-						})
-					: { ok: false, reason: "no-wasm" };
+				const replayed = await core.replayTrace({
+					traceB64: body.trace,
+					claimed: { score: body.score, alive: false },
+					serverSecret: SERVER_SECRET,
+					sessionId: body.sid,
+				});
 				if (!replayed.ok) {
 					return deny(`replay-${replayed.reason}`);
 				}

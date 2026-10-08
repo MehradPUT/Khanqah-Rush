@@ -1,6 +1,4 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import {
 	deriveSeed,
@@ -12,17 +10,6 @@ import {
 } from "../server/score-core.js";
 import worker from "../worker/index.js";
 
-let simWasmBytes = null;
-async function wasmBytesOrNull() {
-	if (!simWasmBytes) {
-		if (!existsSync("public/wasm/sim.wasm")) {
-			return null;
-		}
-		simWasmBytes = await readFile("public/wasm/sim.wasm");
-	}
-	return simWasmBytes;
-}
-
 const ENV = {
 	TELEGRAM_BOT_TOKEN: "test-token",
 	SERVER_SECRET: "test-secret",
@@ -33,18 +20,9 @@ const ENV = {
 		// Method shorthand (not an arrow closure): like the real Workers
 		// assets binding, it requires its receiver — a detached
 		// `ASSETS.fetch` call throws instead of silently working.
-		async fetch(req) {
+		async fetch(_req) {
 			if (this === undefined) {
 				throw new TypeError("Illegal invocation");
-			}
-			const url = new URL(req.url);
-			if (url.pathname === "/wasm/sim.wasm") {
-				const bytes = await wasmBytesOrNull();
-				if (bytes) {
-					return new Response(bytes, {
-						headers: { "Content-Type": "application/wasm" },
-					});
-				}
 			}
 			return new Response("assets", { status: 200 });
 		},
@@ -77,13 +55,9 @@ async function traceFields(seedHex) {
 /**
  * Play a fixed alternating script against the session seed, learn the
  * replayed outcome locally, then submit it. Returns the worker response
- * plus what a correct server must write. Skips (null) without artifacts.
+ * plus what a correct server must write.
  */
 async function submitReplayed({ lt, sid, key, seedHex }) {
-	const wasmBytes = await wasmBytesOrNull();
-	if (!wasmBytes) {
-		return null;
-	}
 	const { seedLo, seedHi } = splitSeedHex(seedHex);
 	const chops = [];
 	let t = 0;
@@ -97,7 +71,6 @@ async function submitReplayed({ lt, sid, key, seedHex }) {
 	const traceHash = createHash("sha256").update(bytes).digest("hex");
 	const learned = await replayTrace({
 		traceB64: trace,
-		wasmBytes,
 		claimed: { score: -1, alive: true },
 		serverSecret: "test-secret",
 		sessionId: sid,

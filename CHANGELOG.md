@@ -53,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Server replay runs a pure-JS port of the sim (`shared/sim.js`):
+  the Workers edge V8 refuses to compile WASM (`code generation
+  disallowed by embedder`), so the WASM artifact path could never
+  verify a score. Bit-identity with the Rust reference is enforced by
+  golden vectors plus randomized lockstep runs
+  (`tests/sim-parity.test.js`).
 - Sim core rewritten to legacy-bundle mechanics (pair-queue branches with
   magnitudes, shift-on-chop with odd-length replenish, stamina deadlines,
   no score on lethal chops; wire v2). Nima's rejuvenation cycle (20 s

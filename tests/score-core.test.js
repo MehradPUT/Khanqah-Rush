@@ -362,6 +362,9 @@ describe("trace codec", () => {
 });
 
 describe("deterministic replay", () => {
+	// Server replay runs the pure-JS port (shared/sim.js) — no artifact
+	// needed. The WASM module below is only used to *generate* traces,
+	// proving the JS port accepts WASM-oracle play.
 	async function simWasm() {
 		const { readFile } = await import("node:fs/promises");
 		const { existsSync } = await import("node:fs");
@@ -404,15 +407,10 @@ describe("deterministic replay", () => {
 	}
 
 	it("accepts a trace whose replay matches the claim", async () => {
-		const wasmBytes = await simWasm();
-		if (!wasmBytes) {
-			return;
-		}
 		// Pinned against the replay CLI for the derived seed of sid-replay:
-		// score=2, branch death. Same artifact the server loads.
+		// score=2, branch death.
 		const result = await replayTrace({
 			traceB64: await traceForSession(alternating(60), 200),
-			wasmBytes,
 			claimed: { score: 2, alive: false, deathBranch: true },
 			serverSecret: SECRET,
 			sessionId: "sid-replay",
@@ -465,7 +463,6 @@ describe("deterministic replay", () => {
 		const traceB64 = Buffer.from(raw).toString("base64");
 		const result = await replayTrace({
 			traceB64,
-			wasmBytes,
 			claimed: { score: 100, alive: true, deathBranch: false },
 			serverSecret: SECRET,
 			sessionId: "sid-rejuv",
@@ -475,13 +472,8 @@ describe("deterministic replay", () => {
 	});
 
 	it("rejects inflated claims and garbage traces", async () => {
-		const wasmBytes = await simWasm();
-		if (!wasmBytes) {
-			return;
-		}
 		const badClaim = await replayTrace({
 			traceB64: await traceForSession(alternating(60), 200),
-			wasmBytes,
 			claimed: { score: 999, alive: false, deathBranch: true },
 			serverSecret: SECRET,
 			sessionId: "sid-replay",
@@ -491,7 +483,6 @@ describe("deterministic replay", () => {
 
 		const wrongSeed = await replayTrace({
 			traceB64: await traceForSession(alternating(60), 200),
-			wasmBytes,
 			claimed: { score: 2, alive: false, deathBranch: true },
 			serverSecret: SECRET,
 			sessionId: "sid-other",
@@ -501,7 +492,6 @@ describe("deterministic replay", () => {
 
 		const garbage = await replayTrace({
 			traceB64: Buffer.from([1, 2, 3]).toString("base64"),
-			wasmBytes,
 			claimed: { score: 0, alive: true, deathBranch: false },
 		});
 		expect(garbage.ok).toBe(false);
