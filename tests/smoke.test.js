@@ -40,12 +40,41 @@ describe("legacy entry smoke", () => {
 		expect(read("public/js/main.js")).toBe(read("dist/js/main.js"));
 	});
 
+	it("wires the seeded RNG bootstrap before the bundle", () => {
+		const html = read("index.html");
+		const bootstrapPos = html.indexOf("js/seeded-rng.js");
+		const bundlePos = html.indexOf("js/main.js");
+		expect(bootstrapPos).toBeGreaterThanOrEqual(0);
+		expect(bundlePos).toBeGreaterThan(bootstrapPos);
+		const bundle = read("public/js/main.js");
+		expect(bundle.split("window.__rng50()").length - 1).toBe(2);
+		expect(bundle).not.toContain("1E3*Math.random()+1");
+	});
+
 	it("wires the signed-report companion without bundle surgery", () => {
 		expect(read("index.html")).toContain("/client/js/score-report.mjs");
 		const reporter = read("client/js/score-report.mjs");
 		expect(reporter).toContain("in_result");
 		expect(reporter).toContain("/api/setScore");
 		expect(reporter).toContain("signer-loader.mjs");
+		expect(reporter).toContain("khanqah-save-badge");
+		expect(reporter).toContain("recorded");
+		expect(reporter).toContain("signer-missing");
+		expect(reporter).toContain("launch.seed.seedLo");
 		expect(reporter).not.toContain("TELEGRAM_BOT_TOKEN");
+	});
+
+	it("ships the companion inside the built assets", () => {
+		// Vite absorbs the module script tag into the bundle; the page
+		// must not depend on a separate /client/js/* file existing.
+		const dir = path.join(root, "dist/assets");
+		const files = fs
+			.readdirSync(dir)
+			.filter((f) => f.endsWith(".js"))
+			.map((f) => read(`dist/assets/${f}`))
+			.join("\n");
+		expect(files).toContain("__khanqah");
+		expect(files).toContain("/api/setScore");
+		expect(files).toContain("in_result");
 	});
 });

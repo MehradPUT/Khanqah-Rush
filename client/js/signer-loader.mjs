@@ -4,8 +4,8 @@
  * instantiation, no glue deps. Returns null when the module is absent or
  * incompatible — the game must always work without it.
  *
- * Canonical envelope (must match server/score-core.js exactly):
- *   `khanqah-v1\n${sessionId}\n${score}\n${durationSec}\n${nonce}\n${timestamp}`
+ * Canonical envelope v2 (must match server/score-core.js exactly):
+ *   `khanqah-v2\n${sessionId}\n${score}\n${durationSec}\n${nonce}\n${timestamp}\n${traceHash}`
  * as UTF-8 bytes, tagged with HMAC-SHA256 under the session key.
  *
  * @typedef {object} EnvelopeFields
@@ -14,6 +14,7 @@
  * @property {number} durationSec
  * @property {string} nonce
  * @property {number} timestamp
+ * @property {string} traceHash
  *
  * @typedef {object} ScoreSigner
  * @property {() => number} version
@@ -26,12 +27,13 @@ export const SIGNER_WIRE_VERSION = 2;
 
 export function canonicalEnvelope(fields) {
 	const text = [
-		"khanqah-v1",
+		"khanqah-v2",
 		fields.sessionId,
 		String(fields.score),
 		String(fields.durationSec),
 		fields.nonce,
 		String(fields.timestamp),
+		fields.traceHash,
 	].join("\n");
 	return new TextEncoder().encode(text);
 }
@@ -71,9 +73,13 @@ function wrap(exports) {
 		if (!(key instanceof Uint8Array) || key.length !== 32) {
 			return false;
 		}
-		const slot = new Uint8Array(memory.buffer, msgPtr(), key.length);
-		slot.set(key);
-		return initSession(msgPtr(), key.length) === 0;
+		try {
+			const slot = new Uint8Array(memory.buffer, msgPtr(), key.length);
+			slot.set(key);
+			return initSession(msgPtr(), key.length) === 0;
+		} catch {
+			return false;
+		}
 	}
 
 	function signBytes(message) {
@@ -84,11 +90,15 @@ function wrap(exports) {
 		) {
 			return null;
 		}
-		new Uint8Array(memory.buffer, msgPtr(), message.length).set(message);
-		if (signTag(message.length) !== 0) {
+		try {
+			new Uint8Array(memory.buffer, msgPtr(), message.length).set(message);
+			if (signTag(message.length) !== 0) {
+				return null;
+			}
+			return new Uint8Array(memory.buffer.slice(tagPtr(), tagPtr() + 32));
+		} catch {
 			return null;
 		}
-		return new Uint8Array(memory.buffer.slice(tagPtr(), tagPtr() + 32));
 	}
 
 	return {
@@ -102,7 +112,12 @@ function wrap(exports) {
 	};
 }
 
-export async function loadSigner(fetchImpl = fetch, base = "/") {
+// fetchImpl defaults to a bound closure: a detached bare `fetch`
+// reference throws Illegal invocation on some browsers.
+export async function loadSigner(
+	fetchImpl = (...args) => fetch(...args),
+	base = "/",
+) {
 	try {
 		const response = await fetchImpl(`${base}wasm/signer.wasm`);
 		if (!response.ok) {

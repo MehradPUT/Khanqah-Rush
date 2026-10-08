@@ -1,6 +1,6 @@
 # Phase 5: deterministic sim alignment and replay
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 85
 - TAGS: wasm, security, backend
 

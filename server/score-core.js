@@ -5,20 +5,31 @@
  * module runs on Node 18+ and Cloudflare Workers with no dependencies.
  * Transport adapters (node:http example, future Worker entry) live outside.
  *
- * Canonical envelope — must match src/wasm/signer.ts exactly:
- *   `khanqah-v1\n${sessionId}\n${score}\n${durationSec}\n${nonce}\n${timestamp}`
+ * Canonical envelope v2 — must match client/js/signer-loader.mjs exactly:
+ *   `khanqah-v2\n${sessionId}\n${score}\n${durationSec}\n${nonce}\n${timestamp}\n${traceHash}`
+ * traceHash binds the (possibly absent during transition) trace.
  */
 
-export const ENVELOPE_VERSION = "khanqah-v1";
+export const ENVELOPE_VERSION = "khanqah-v2";
 export const TIMESTAMP_WINDOW_SEC = 60;
 export const NONCE_TTL_SEC = 180;
 export const MAX_CPS = 10;
+// Session lifetime after mint, enforced statelessly from the launch
+// token's `sat` claim (no server memory: Workers isolates don't share
+// any, so an in-memory "current session" check fails across isolates).
+export const SESSION_TTL_SEC = 3600;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
 function toBytes(str) {
 	return textEncoder.encode(str);
+}
+
+function toHex(bytes) {
+	return Array.from(bytes)
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
 }
 
 function fromHex(hex) {
@@ -94,15 +105,27 @@ function nowSec() {
  * the client echoes it back with every score post. Regular launches carry
  * user/chat/message ids; inline launches carry the inline message id
  * instead (there is no chat message to bind to).
+ *
+ * The session id rides inside the signed payload (`s`, minted at `sat`)
+ * so score posts validate statelessly — no shared store needed across
+ * isolates. sessionId is required; old tokens without it verify as null.
  */
 export async function issueLaunchToken(
-	{ userId, chatId, messageId, inlineMessageId, ttlSec = 3600 },
+	{ userId, chatId, messageId, inlineMessageId, sessionId, ttlSec = 3600 },
 	serverSecret,
 	atSec = nowSec(),
 ) {
+	if (typeof sessionId !== "string" || sessionId.length === 0) {
+		throw new Error("sessionId is required");
+	}
+	if (!Number.isInteger(userId)) {
+		throw new Error("userId is required");
+	}
 	const payload = {
 		u: userId,
 		exp: atSec + ttlSec,
+		s: sessionId,
+		sat: atSec,
 	};
 	if (typeof inlineMessageId === "string" && inlineMessageId.length > 0) {
 		payload.i = inlineMessageId;
@@ -146,6 +169,9 @@ export async function verifyLaunchToken(token, serverSecret, atSec = nowSec()) {
 		typeof payload.exp !== "number" ||
 		payload.exp < atSec ||
 		!Number.isInteger(payload.u) ||
+		typeof payload.s !== "string" ||
+		payload.s.length === 0 ||
+		!Number.isInteger(payload.sat) ||
 		!(
 			(typeof payload.i === "string" && payload.i.length > 0) ||
 			(Number.isInteger(payload.c) && Number.isInteger(payload.m))
@@ -156,6 +182,21 @@ export async function verifyLaunchToken(token, serverSecret, atSec = nowSec()) {
 	return payload;
 }
 
+/**
+ * Stateless session check: the posted sid must be the token-bound one
+ * and the session must be younger than SESSION_TTL_SEC. Pure function —
+ * safe to call on any isolate.
+ */
+export function isSessionLive(launch, sessionId, atSec = nowSec()) {
+	return (
+		!!launch &&
+		launch.s === sessionId &&
+		Number.isInteger(launch.sat) &&
+		atSec >= launch.sat &&
+		atSec - launch.sat < SESSION_TTL_SEC
+	);
+}
+
 /** Derive a 32-byte per-session signing key. Client receives it at launch. */
 export async function deriveSessionKey(serverSecret, sessionId) {
 	return hmacSha256(
@@ -164,12 +205,26 @@ export async function deriveSessionKey(serverSecret, sessionId) {
 	);
 }
 
+/**
+ * Derive the per-session sim seed (hex16) bound to the session id.
+ * Deterministic — the server recomputes it instead of storing it.
+ * Minted into the answered game URL next to sid/sk.
+ */
+export async function deriveSeed(serverSecret, sessionId) {
+	const full = await hmacSha256(
+		toBytes(serverSecret),
+		toBytes(`khanqah-seed\n${sessionId}`),
+	);
+	return toHex(full.slice(0, 8));
+}
+
 export function canonicalEnvelope({
 	sessionId,
 	score,
 	durationSec,
 	nonce,
 	timestamp,
+	traceHash,
 }) {
 	return toBytes(
 		[
@@ -179,6 +234,7 @@ export function canonicalEnvelope({
 			String(durationSec),
 			nonce,
 			String(timestamp),
+			traceHash,
 		].join("\n"),
 	);
 }
@@ -204,8 +260,8 @@ export function createMemoryNonceStore() {
 
 /**
  * Verify a score envelope. Returns { ok: true } or { ok: false, reason }.
- * Reasons: bad-shape | stale | replay | bad-signature. Reasons stay
- * server-side — the transport must answer 200 either way.
+ * Reasons: bad-shape | stale | replay | bad-signature | bad-trace.
+ * Reasons stay server-side — the transport must answer 200 either way.
  */
 export async function verifyEnvelope(
 	envelope,
@@ -216,8 +272,16 @@ export async function verifyEnvelope(
 		atSec = nowSec(),
 	},
 ) {
-	const { sessionId, score, durationSec, nonce, timestamp, tag } =
-		envelope ?? {};
+	const {
+		sessionId,
+		score,
+		durationSec,
+		nonce,
+		timestamp,
+		tag,
+		trace,
+		traceHash,
+	} = envelope ?? {};
 	if (
 		typeof sessionId !== "string" ||
 		sessionId.length === 0 ||
@@ -228,7 +292,10 @@ export async function verifyEnvelope(
 		typeof nonce !== "string" ||
 		!/^[0-9a-f]{32}$/.test(nonce) ||
 		!Number.isInteger(timestamp) ||
-		typeof tag !== "string"
+		typeof tag !== "string" ||
+		typeof trace !== "string" ||
+		typeof traceHash !== "string" ||
+		!/^[0-9a-f]{64}$/.test(traceHash)
 	) {
 		return { ok: false, reason: "bad-shape" };
 	}
@@ -238,10 +305,30 @@ export async function verifyEnvelope(
 	if (!nonceStore.checkAndAdd(nonce)) {
 		return { ok: false, reason: "replay" };
 	}
+	const traceBytes = traceFromB64(trace);
+	if (!traceBytes || traceBytes.length > TRACE_MAX_BYTES) {
+		return { ok: false, reason: "bad-trace" };
+	}
+	if (!unpackTrace(traceBytes)) {
+		return { ok: false, reason: "bad-trace" };
+	}
+	const actualHash = toHex(
+		new Uint8Array(await crypto.subtle.digest("SHA-256", traceBytes)),
+	);
+	if (actualHash !== traceHash.toLowerCase()) {
+		return { ok: false, reason: "bad-trace" };
+	}
 	const sessionKey = await deriveSessionKey(serverSecret, sessionId);
 	const expected = await hmacSha256(
 		sessionKey,
-		canonicalEnvelope({ sessionId, score, durationSec, nonce, timestamp }),
+		canonicalEnvelope({
+			sessionId,
+			score,
+			durationSec,
+			nonce,
+			timestamp,
+			traceHash,
+		}),
 	);
 	const got = fromHex(tag);
 	if (!got || !timingSafeEqual(got, expected)) {
@@ -288,5 +375,151 @@ export function buildSetGameScoreCall({
 	return {
 		method: "setGameScore",
 		params: { user_id: userId, chat_id: chatId, message_id: messageId, score },
+	};
+}
+
+import { EV_ALIVE, Sim } from "../shared/sim.js";
+// ---------------------------------------------------------------------------
+// Trace codec lives in shared/trace-codec.js (single source for page,
+// server, and tests). Imported for internal use and re-exported so
+// existing importers keep working.
+// ---------------------------------------------------------------------------
+import {
+	HERO_AHMAD,
+	HERO_ALI,
+	HERO_AMIRHOSSEIN,
+	HERO_COUNT,
+	HERO_ERFAN,
+	HERO_FARGOL,
+	HERO_FATEME,
+	HERO_NIMA,
+	HERO_PARSA,
+	heroIdForName,
+	packTrace,
+	sha256Hex,
+	splitSeedHex,
+	TRACE_MAX_BYTES,
+	TRACE_MAX_CHOPS,
+	TRACE_VERSION,
+	traceFromB64,
+	traceToB64,
+	unpackTrace,
+} from "../shared/trace-codec.js";
+
+export {
+	HERO_AHMAD,
+	HERO_ALI,
+	HERO_AMIRHOSSEIN,
+	HERO_COUNT,
+	HERO_ERFAN,
+	HERO_FARGOL,
+	HERO_FATEME,
+	HERO_NIMA,
+	HERO_PARSA,
+	heroIdForName,
+	packTrace,
+	sha256Hex,
+	splitSeedHex,
+	TRACE_MAX_BYTES,
+	TRACE_MAX_CHOPS,
+	TRACE_VERSION,
+	traceFromB64,
+	traceToB64,
+	unpackTrace,
+};
+
+/**
+ * Replay a trace through the deterministic sim and compare with the claim.
+ * The seed is re-derived from (serverSecret, sessionId) and must match the
+ * trace-embedded seed — clients cannot shop for favorable seeds.
+ * The sim is pure JS (shared/sim.js, bit-identical to the Rust reference
+ * by tests/sim-parity.test.js): the Workers edge V8 refuses to compile
+ * WASM ("code generation disallowed by embedder"), so replay keeps zero
+ * engine dependencies and works on any isolate with no artifact fetch.
+ * Returns { ok: true, replayed } or { ok: false, reason }.
+ * Reasons: bad-trace | bad-seed | no-outcome-match.
+ */
+export async function replayTrace({
+	traceB64,
+	claimed,
+	serverSecret,
+	sessionId,
+}) {
+	const raw = typeof traceB64 === "string" ? traceFromB64(traceB64) : null;
+	if (!raw || raw.length > TRACE_MAX_BYTES) {
+		return { ok: false, reason: "bad-trace" };
+	}
+	const trace = unpackTrace(raw);
+	if (!trace) {
+		return { ok: false, reason: "bad-trace" };
+	}
+	const seedHex = await deriveSeed(serverSecret, sessionId);
+	const seedBytes = fromHex(seedHex);
+	const seedView = new DataView(
+		seedBytes.buffer,
+		seedBytes.byteOffset,
+		seedBytes.byteLength,
+	);
+	if (
+		seedView.getUint32(0, true) !== trace.seedLo >>> 0 ||
+		seedView.getUint32(4, true) !== trace.seedHi >>> 0
+	) {
+		return { ok: false, reason: "bad-seed" };
+	}
+	const sim = new Sim();
+	sim.reset(trace.seedLo, trace.seedHi);
+	// Trace v1 carries no hero id and unpacks it as Nima; v2 carries
+	// the companion-observed hero. Other heroes' rounds replay under
+	// their own models (see shared/sim.js).
+	sim.setCharacter(trace.hero);
+	for (const chop of trace.chops) {
+		// sim sides: 1 = LEFT, 2 = RIGHT; trace sides: 0 = LEFT, 1 = RIGHT.
+		const ev = sim.chop(chop.side === 0 ? 1 : 2, chop.t);
+		if (ev !== EV_ALIVE) {
+			break;
+		}
+	}
+	sim.advanceIdle(trace.endTimeMs);
+	const replayed = {
+		score: sim.score,
+		alive: sim.alive,
+		deathBranch: sim.deathReason() === 1,
+		survivalMs: sim.survivalMs,
+	};
+	const match =
+		replayed.score === claimed.score && replayed.alive === claimed.alive;
+	if (!match) {
+		return { ok: false, reason: "no-outcome-match", replayed };
+	}
+	return { ok: true, replayed };
+}
+
+/**
+ * Issuance rate limiter (launches per user per hour). Best-effort and
+ * per-isolate by nature — it only decides whether a Play press gets a
+ * session URL, never whether a score records. Session validity itself
+ * is stateless (see isSessionLive), so scoring works on any isolate.
+ * No single-active-session eviction: every minted session stays valid
+ * for SESSION_TTL_SEC. Parallel seed-shopping costs a fully played round
+ * per seed while replay still binds each score to real inputs, so the
+ * residual is accepted.
+ */
+export function createSessionRegistry({ maxLaunchesPerHour = 30 } = {}) {
+	// userId -> { launches: [atSec...] }
+	const users = new Map();
+	return {
+		register(userId, atSec = nowSec()) {
+			let entry = users.get(userId);
+			if (!entry) {
+				entry = { launches: [] };
+				users.set(userId, entry);
+			}
+			entry.launches = entry.launches.filter((t) => t > atSec - 3600);
+			if (entry.launches.length >= maxLaunchesPerHour) {
+				return false;
+			}
+			entry.launches.push(atSec);
+			return true;
+		},
 	};
 }

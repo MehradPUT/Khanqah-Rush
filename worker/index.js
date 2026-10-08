@@ -4,21 +4,28 @@
  * Same contract as server/example.cjs (see docs/DEPLOYMENT.md Part D), but
  * running on the edge next to the static game: webhook + score API handled
  * here, everything else falls through to the Workers Static Assets binding.
- * Secrets arrive via env (wrangler secret put); stateless per isolate —
- * the nonce store is in-memory, so cross-isolate replays are a documented
- * limitation until a shared store exists.
+ * Secrets arrive via env (wrangler secret put); sessions validate
+ * statelessly from the signed launch token (no shared memory between
+ * isolates). The nonce store stays in-memory, so cross-isolate replays
+ * of the same envelope are a documented limitation until a shared store
+ * exists (replays gain nothing: the tag binds the score).
  */
 import {
 	buildSetGameScoreCall,
 	checkPlausibility,
 	createMemoryNonceStore,
+	createSessionRegistry,
+	deriveSeed,
 	deriveSessionKey,
+	isSessionLive,
 	issueLaunchToken,
+	replayTrace,
 	verifyEnvelope,
 	verifyLaunchToken,
 } from "../server/score-core.js";
 
 const nonceStore = createMemoryNonceStore();
+const sessions = createSessionRegistry();
 
 function randomSessionId() {
 	const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -55,6 +62,11 @@ async function telegram(env, method, params) {
 
 function serverSecret(env) {
 	return env.SERVER_SECRET || env.TELEGRAM_BOT_TOKEN;
+}
+
+function requireSecret(env) {
+	const secret = serverSecret(env);
+	return typeof secret === "string" && secret.length > 0 ? secret : null;
 }
 
 async function handleUpdate(update, req, env) {
@@ -114,7 +126,10 @@ async function handleUpdate(update, req, env) {
 		return json({ ok: true });
 	}
 	const query = update.callback_query;
-	if (query?.game_short_name === env.GAME_SHORT_NAME) {
+	if (!env.GAME_SHORT_NAME || query?.game_short_name !== env.GAME_SHORT_NAME) {
+		return json({ ok: true });
+	}
+	{
 		const origin = new URL(req.url).origin;
 		const gameUrl = env.GAME_URL || origin;
 		let url = gameUrl;
@@ -130,13 +145,21 @@ async function handleUpdate(update, req, env) {
 					? { userId, inlineMessageId }
 					: null);
 		if (launchIds) {
+			const secret = requireSecret(env);
 			const sessionId = randomSessionId();
-			const lt = await issueLaunchToken(launchIds, serverSecret(env));
-			const sk = toHex(await deriveSessionKey(serverSecret(env), sessionId));
-			const sep = gameUrl.includes("?") ? "&" : "?";
-			url =
-				`${gameUrl}${sep}lt=${encodeURIComponent(lt)}` +
-				`&sid=${sessionId}&sk=${sk}`;
+			// Registry only rate-limits issuance (best-effort per isolate);
+			// the session itself is token-bound (isSessionLive at score
+			// time), so scoring works on any isolate.
+			if (secret && sessions.register(userId)) {
+				const lt = await issueLaunchToken({ ...launchIds, sessionId }, secret);
+				const sk = toHex(await deriveSessionKey(secret, sessionId));
+				const seed = await deriveSeed(secret, sessionId);
+				const sep = gameUrl.includes("?") ? "&" : "?";
+				url =
+					`${gameUrl}${sep}lt=${encodeURIComponent(lt)}` +
+					`&sid=${sessionId}&sk=${sk}&seed=${seed}`;
+			}
+			// Rate-limited launches get the plain URL: playable, local-only.
 		}
 		if (env.TELEGRAM_BOT_TOKEN) {
 			await telegram(env, "answerCallbackQuery", {
@@ -150,10 +173,25 @@ async function handleUpdate(update, req, env) {
 
 async function handleSetScore(req, env) {
 	const body = await req.json().catch(() => ({}));
-	// Always 200 so probes learn nothing; reasons stay server-side.
-	const launch = await verifyLaunchToken(body.lt, serverSecret(env));
+	// Always 200 so probes learn nothing; the recorded flag (also visible
+	// on the public leaderboard anyway) tells the game what happened.
+	// TEMP-DEBUG: reason exposed until the first verified save; remove after.
+	const deny = (reason) => {
+		console.warn(`[worker] score rejected: ${reason}`);
+		return json({ ok: true, recorded: false, debugReason: reason });
+	};
+	// Fail closed: an empty secret would verify everything under the
+	// empty HMAC key.
+	const secret = requireSecret(env);
+	if (!secret) {
+		return deny("no-secret");
+	}
+	const launch = await verifyLaunchToken(body.lt, secret);
 	if (!launch) {
-		return json({ ok: true });
+		return deny("bad-launch");
+	}
+	if (!isSessionLive(launch, body.sid)) {
+		return deny("stale-session");
 	}
 	const verified = await verifyEnvelope(
 		{
@@ -163,18 +201,32 @@ async function handleSetScore(req, env) {
 			nonce: body.nonce,
 			timestamp: body.timestamp,
 			tag: body.tag,
+			trace: body.trace,
+			traceHash: body.traceHash,
 		},
-		{ serverSecret: serverSecret(env), nonceStore },
+		{ serverSecret: secret, nonceStore },
 	);
 	if (!verified.ok) {
-		return json({ ok: true });
+		return deny(`envelope-${verified.reason}`);
 	}
 	const plausible = checkPlausibility({
 		score: body.score,
 		durationSec: body.durationSec,
 	});
 	if (!plausible.ok) {
-		return json({ ok: true });
+		return deny(`plausibility-${plausible.reason}`);
+	}
+	const replayed = await replayTrace({
+		traceB64: body.trace,
+		claimed: {
+			score: body.score,
+			alive: false,
+		},
+		serverSecret: secret,
+		sessionId: body.sid,
+	});
+	if (!replayed.ok) {
+		return deny(`replay-${replayed.reason}`);
 	}
 	if (env.TELEGRAM_BOT_TOKEN) {
 		const call = buildSetGameScoreCall({
@@ -184,9 +236,15 @@ async function handleSetScore(req, env) {
 			inlineMessageId: launch.i,
 			score: body.score,
 		});
-		await telegram(env, call.method, call.params);
+		// Without force, Telegram keeps the higher board score and
+		// answers ok:false for a lower one — only a real write counts.
+		const written = await telegram(env, call.method, call.params);
+		if (written?.ok) {
+			return json({ ok: true, recorded: true });
+		}
+		return deny("telegram-rejected");
 	}
-	return json({ ok: true });
+	return deny("no-bot-token");
 }
 
 export default {
@@ -203,7 +261,30 @@ export default {
 			return handleUpdate(update, req, env);
 		}
 		if (req.method === "POST" && url.pathname === "/api/setScore") {
-			return handleSetScore(req, env);
+			// TEMP-DEBUG: surface the crash line until the first verified
+			// save; remove together with debugReason.
+			try {
+				return await handleSetScore(req, env);
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				console.error(`[worker] setScore crashed: ${message}`);
+				return json({
+					ok: true,
+					recorded: false,
+					debugReason: `crash:${message}`,
+				});
+			}
+		}
+		if (req.method === "POST" && url.pathname === "/api/getHighScores") {
+			// Legacy bundle board fetch. No per-chat board is tracked
+			// server-side (Telegram owns scoreboards; no KV by design), so
+			// answer empty instead of letting the request fall through to
+			// static assets (which 500s on POST).
+			await req.text().catch(() => "");
+			return json({ ok: true, scores: [] });
+		}
+		if (!env.ASSETS) {
+			return json({ ok: false }, 500);
 		}
 		return env.ASSETS.fetch(req);
 	},

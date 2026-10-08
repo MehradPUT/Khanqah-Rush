@@ -10,6 +10,9 @@ BOT_USERNAME = "KhanqahRushBot"
 
 # Static-asset hosting for the Vite build output; the Worker above handles
 # /telegram-webhook and /api/*, everything else falls through to dist/.
+# `binding` exposes the assets fetcher to code (the replay loader reads
+# sim.wasm through it); without it env.ASSETS is undefined.
 [assets]
 directory = "./dist"
+binding = "ASSETS"
 not_found_handling = "single-page-application"

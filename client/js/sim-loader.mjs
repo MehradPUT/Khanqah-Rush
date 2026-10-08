@@ -6,6 +6,7 @@
  * @typedef {object} Sim
  * @property {() => number} version
  * @property {(lo: number, hi: number) => void} reset
+ * @property {(id: number) => void} [setCharacter]
  * @property {(side: number, tMs: number) => number} chop
  * @property {(tMs: number) => number} advanceIdle
  * @property {() => number} score
@@ -33,7 +34,9 @@ export const DEATH_NONE = 0;
 export const DEATH_BRANCH = 1;
 export const DEATH_EXHAUSTION = 2;
 
-const REQUIRED = [
+// Canonical WASM export surface. Reused by server replay validation so
+// both sides agree on the artifact shape (single source).
+export const SIM_REQUIRED_EXPORTS = [
 	"sim_version",
 	"sim_reset",
 	"sim_chop",
@@ -50,6 +53,8 @@ const REQUIRED = [
 	"memory",
 ];
 
+const REQUIRED = SIM_REQUIRED_EXPORTS;
+
 function wrap(exports) {
 	const raw = exports;
 	if (
@@ -63,6 +68,12 @@ function wrap(exports) {
 	return {
 		version: () => raw.sim_version(),
 		reset: (lo, hi) => raw.sim_reset(lo, hi),
+		// Optional: older artifacts predate the hero model. The sim
+		// defaults to Nima (id 0), so absence only matters for
+		// non-Nima rounds, which replay-mismatch by design.
+		...(typeof raw.sim_set_character === "function"
+			? { setCharacter: (id) => raw.sim_set_character(id) }
+			: {}),
 		chop: (side, t) => raw.sim_chop(side, t),
 		advanceIdle: (t) => raw.sim_advance_idle(t),
 		score: () => raw.sim_score(),
@@ -83,7 +94,10 @@ function wrap(exports) {
 	};
 }
 
-export async function loadSim(fetchImpl = fetch, base = "/") {
+export async function loadSim(
+	fetchImpl = (...args) => fetch(...args),
+	base = "/",
+) {
 	try {
 		const response = await fetchImpl(`${base}wasm/sim.wasm`);
 		if (!response.ok) {

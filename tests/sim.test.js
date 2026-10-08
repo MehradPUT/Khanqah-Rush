@@ -3,6 +3,7 @@ import {
 	DEATH_BRANCH,
 	EV_ALREADY_DEAD,
 	EV_DIED_BRANCH,
+	EV_DIED_EXHAUSTION,
 	EV_INVALID_TIME,
 	loadSim,
 	SIM_LEFT,
@@ -65,5 +66,49 @@ describe("deterministic sim", () => {
 		sim?.reset(7, 0);
 		sim?.chop(SIM_LEFT, 500);
 		expect(sim?.chop(SIM_LEFT, 100)).toBe(EV_INVALID_TIME);
+	});
+
+	it("pins stamina through Nima's rejuvenation window", async () => {
+		const { readFile } = await import("node:fs/promises");
+		const { existsSync } = await import("node:fs");
+		const path = "public/wasm/sim.wasm";
+		if (!existsSync(path)) {
+			return;
+		}
+		const bytes = await readFile(path);
+		const fetchImpl = vi.fn(async () => new Response(bytes, { status: 200 }));
+		const sim = await loadSim(fetchImpl, "/");
+		if (!sim) {
+			return;
+		}
+		// Safe-side play into the first 15 s window, then idle past the
+		// plain deadline: Nima lives, ability-free Fateme dies.
+		const playToWindow = () => {
+			let t = 0;
+			let ev = EV_ALREADY_DEAD;
+			for (let i = 0; i < 100; i++) {
+				t += 150;
+				const bottom = (sim.segments() ?? [])[0] ?? 0;
+				ev = sim.chop(bottom < 0 ? SIM_RIGHT : SIM_LEFT, t);
+				if (ev !== 0) {
+					break;
+				}
+			}
+			return { t, ev };
+		};
+		sim.reset(42, 0);
+		expect(playToWindow()).toMatchObject({ t: 15000, ev: 0 });
+		expect(sim.rejuvenations()).toBe(1);
+		expect(sim.advanceIdle(24000)).toBe(0);
+		expect(sim.alive()).toBe(true);
+
+		if (typeof sim.setCharacter === "function") {
+			sim.reset(42, 0);
+			sim.setCharacter(7);
+			expect(playToWindow()).toMatchObject({ t: 15000, ev: 0 });
+			expect(sim.rejuvenations()).toBe(0);
+			expect(sim.advanceIdle(24000)).toBe(EV_DIED_EXHAUSTION);
+			expect(sim.alive()).toBe(false);
+		}
 	});
 });
