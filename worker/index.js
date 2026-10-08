@@ -32,6 +32,9 @@ const sessions = createSessionRegistry();
 // network hop or configuration is needed.
 let simWasmBytes = null;
 async function getSimWasm(assetsFetch, origin) {
+	if (!assetsFetch) {
+		return null;
+	}
 	if (!simWasmBytes) {
 		const res = await assetsFetch(new Request(`${origin}/wasm/sim.wasm`));
 		if (!res.ok) {
