@@ -30,7 +30,13 @@ const ENV = {
 	GAME_URL: "https://game.test",
 	WEBHOOK_SECRET: "wh-secret",
 	ASSETS: {
-		fetch: async (req) => {
+		// Method shorthand (not an arrow closure): like the real Workers
+		// assets binding, it requires its receiver — a detached
+		// `ASSETS.fetch` call throws instead of silently working.
+		async fetch(req) {
+			if (this === undefined) {
+				throw new TypeError("Illegal invocation");
+			}
 			const url = new URL(req.url);
 			if (url.pathname === "/wasm/sim.wasm") {
 				const bytes = await wasmBytesOrNull();

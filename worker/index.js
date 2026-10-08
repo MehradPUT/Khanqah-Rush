@@ -29,14 +29,16 @@ const sessions = createSessionRegistry();
 
 // Artifact bytes, cached across requests in the isolate. Loaded through
 // the static-assets binding (same path as the game page uses) so no extra
-// network hop or configuration is needed.
+// network hop or configuration is needed. Takes the binding itself —
+// never a detached `.fetch`: Workers fetchers throw Illegal invocation
+// when called without their receiver.
 let simWasmBytes = null;
-async function getSimWasm(assetsFetch, origin) {
-	if (!assetsFetch) {
+async function getSimWasm(assets, origin) {
+	if (!assets) {
 		return null;
 	}
 	if (!simWasmBytes) {
-		const res = await assetsFetch(new Request(`${origin}/wasm/sim.wasm`));
+		const res = await assets.fetch(new Request(`${origin}/wasm/sim.wasm`));
 		if (!res.ok) {
 			return null;
 		}
@@ -222,7 +224,7 @@ async function handleSetScore(req, env) {
 	if (!plausible.ok) {
 		return deny(`plausibility-${plausible.reason}`);
 	}
-	const wasmBytes = await getSimWasm(env.ASSETS.fetch, new URL(req.url).origin);
+	const wasmBytes = await getSimWasm(env.ASSETS, new URL(req.url).origin);
 	const replayed = wasmBytes
 		? await replayTrace({
 				traceB64: body.trace,
