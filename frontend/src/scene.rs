@@ -80,26 +80,63 @@ fn blit(d: &mut impl RaylibDraw, tex: &Texture2D, x: f32, y: f32, w: f32, h: f32
     );
 }
 
+/// Tiled blit clipped to a region (bundle TilingSprite equivalent).
+/// Tile art is rasterized at 2x, so `tw`/`th` are bundle units.
+fn tile_region(
+    d: &mut impl RaylibDraw,
+    tex: &Texture2D,
+    rx: f32,
+    ry: f32,
+    rw: f32,
+    rh: f32,
+    tw: f32,
+    th: f32,
+) {
+    if rw <= 0.0 || rh <= 0.0 {
+        return;
+    }
+    let sx = tex.width as f32 / tw;
+    let sy = tex.height as f32 / th;
+    let mut y = ry;
+    while y < ry + rh {
+        let mut x = rx;
+        while x < rx + rw {
+            let w = (rx + rw - x).min(tw);
+            let h = (ry + rh - y).min(th);
+            d.draw_texture_pro(
+                tex,
+                Rectangle::new((x - rx) * sx, (y - ry) * sy, w * sx, h * sy),
+                Rectangle::new(x, y, w, h),
+                Vector2::new(0.0, 0.0),
+                0.0,
+                WHITE,
+            );
+            x += tw;
+        }
+        y += th;
+    }
+}
+
 pub fn draw_scene(d: &mut impl RaylibDraw, tex: &Textures, game: &Game, l: &Layout) {
     d.clear_background(BG);
     let cx = l.cx();
     let h = l.h as f32;
+    let ox = l.ox as f32;
+    let dw = l.d as f32;
 
-    // Background layers (bundle O/P/E regions, stretched).
-    blit(d, &tex.bg_bottom, l.ox as f32, 0.0, l.d as f32, h);
-    blit(d, &tex.bg_clouds, l.ox as f32, h - 130.0, l.d as f32, 90.0);
-    blit(d, &tex.bg_trees, l.ox as f32, h - 128.0, l.d as f32, 128.0);
+    // Background layers, tiled like the bundle (never stretched —
+    // stretching the cloud motif is what produced the blobs).
+    tile_region(d, &tex.bg_bottom, ox, 0.0, dw, h, 420.0, 180.0);
+    tile_region(d, &tex.bg_clouds, ox, h - 130.0, dw, 90.0, 950.0, 256.0);
+    tile_region(d, &tex.bg_trees, ox, h - 128.0, dw, 128.0, 840.0, 280.0);
 
-    // Trunk column (100 wide), tiled from the top down to the base.
-    let trunk_w = 100.0;
-    let trunk_h = 750.0;
-    let mut y = l.base_y;
-    while y > 0.0 {
-        y -= trunk_h;
-        blit(d, &tex.trunk, cx - trunk_w / 2.0, y.max(0.0), trunk_w, (l.base_y - y).min(trunk_h));
-    }
+    // Trunk column (100 wide), tiled down to the base.
+    tile_region(d, &tex.trunk, cx - 50.0, 0.0, 100.0, l.base_y, 100.0, 750.0);
 
-    // Branches, one sprite per nonzero pair, bottom-up every 80 px.
+    // Branches: one canopy chunk per nonzero pair, bottom-up every
+    // 80 px, anchored bottom-left at the trunk edge and mirrored by
+    // side (stub faces the trunk). Source-flip: the canonical
+    // raylib mirror, unlike negative dest widths.
     let segs = game.sim.segments();
     let pairs = segs.len() / 2;
     for k in 0..pairs {
@@ -116,31 +153,47 @@ pub fn draw_scene(d: &mut impl RaylibDraw, tex: &Textures, game: &Game, l: &Layo
         if by < -100.0 {
             break;
         }
-        // 125x80 sprite; LEFT extends left, RIGHT extends right.
-        let (dx, flip) = if side < 0 {
-            (cx - 135.0, true)
+        let tw = tex.branch.width as f32;
+        let th = tex.branch.height as f32;
+        if side < 0 {
+            // LEFT chunk: bottom-left corner at trunk edge, mirrored.
+            d.draw_texture_pro(
+                &tex.branch,
+                Rectangle::new(tw, 0.0, -tw, th),
+                Rectangle::new(cx - 135.0, by - 80.0, 125.0, 80.0),
+                Vector2::new(0.0, 0.0),
+                0.0,
+                WHITE,
+            );
         } else {
-            (cx + 10.0, false)
-        };
-        let sw = if flip { -125.0 } else { 125.0 };
-        d.draw_texture_pro(
-            &tex.branch,
-            Rectangle::new(0.0, 0.0, tex.branch.width as f32, tex.branch.height as f32),
-            Rectangle::new(if flip { dx + 125.0 } else { dx }, by - 80.0, sw, 80.0),
-            Vector2::new(0.0, 0.0),
-            0.0,
-            WHITE,
-        );
+            d.draw_texture_pro(
+                &tex.branch,
+                Rectangle::new(0.0, 0.0, tw, th),
+                Rectangle::new(cx + 10.0, by - 80.0, 125.0, 80.0),
+                Vector2::new(0.0, 0.0),
+                0.0,
+                WHITE,
+            );
+        }
     }
 
-    // Lumberjack (static side; Nima only in Phase 3).
+    // Lumberjack, bottom-left anchored (bundle `sa` anchor): right of
+    // the trunk on the initial side, mirrored to face outward.
     let body = if game.alive() {
         &tex.nima_body
     } else {
         &tex.nima_died
     };
-    let (bw, bh) = (68.0, 140.0);
-    blit(d, body, cx + 35.0 - bw / 2.0, l.base_y - bh, bw, bh);
+    let bw = body.width as f32;
+    let bh = body.height as f32;
+    d.draw_texture_pro(
+        body,
+        Rectangle::new(bw, 0.0, -bw, bh),
+        Rectangle::new(cx + 35.0, l.base_y - 140.0, 68.0, 140.0),
+        Vector2::new(0.0, 0.0),
+        0.0,
+        WHITE,
+    );
 
     // Score + stamina HUD (bundle Q/n/A geometry).
     let score = game.score().to_string();
