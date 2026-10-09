@@ -75,6 +75,10 @@ for the companion reporter (wired in a later phase).
 
     var Module = {
       canvas: document.getElementById('canvas'),
+      // Cache-busting: every deploy gets a fresh query version (filled
+      // in by the build script) so browsers and edges never serve a
+      // stale loader, WASM, or data bundle under these fixed names.
+      locateFile: function (path) { return path + '?v=__FRONTEND_V__'; },
       setStatus: function (text) {
         const overlay = document.getElementById('overlay');
         const statusText = document.getElementById('statusText');

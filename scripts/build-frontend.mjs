@@ -28,6 +28,7 @@ import {
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -241,8 +242,22 @@ if (shell.split(MARKER).length !== 2) {
 	);
 	process.exit(1);
 }
+// Deploy version: content hash over loader + WASM + data, so every
+// build gets a distinct cache key for all three fixed filenames.
+const version = createHash("sha256")
+	.update(readFileSync(join(outDir, "khanqah-frontend.js")))
+	.update(readFileSync(join(outDir, "khanqah_frontend.wasm")))
+	.update(readFileSync(dataArtifact))
+	.digest("hex")
+	.slice(0, 12);
+if (!shell.includes("__FRONTEND_V__")) {
+	console.error("[frontend] shell template lost its __FRONTEND_V__ marker");
+	process.exit(1);
+}
 writeFileSync(
 	"public/game/index.html",
-	shell.replace(MARKER, '<script src="khanqah-frontend.js"></script>'),
+	shell
+		.replaceAll("__FRONTEND_V__", version)
+		.replace(MARKER, `<script src="khanqah-frontend.js?v=${version}"></script>`),
 );
 console.log("[frontend] wrote public/game/index.html + .js + .wasm + .data");
