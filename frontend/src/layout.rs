@@ -6,12 +6,12 @@
 
 /// Computed layout for one frame.
 pub struct Layout {
-    /// Viewport size.
-    pub w: i32,
-    pub h: i32,
     /// Scene column width (bundle caps at 800) and its x offset.
     pub d: i32,
     pub ox: i32,
+    /// Viewport height (scene extends full height; mound floats above
+    /// the button footer reserve).
+    pub h: i32,
     /// Tree container base y (bundle `u.y = f-55+W`, W from shifts).
     pub base_y: f32,
     /// Mound top y (tree base and lumberjack feet rest here).
@@ -29,10 +29,9 @@ impl Layout {
         let f = (h - Self::FOOTER).max(320);
         let base_y = f as f32 - 55.0 + shifts as f32 * 50.0;
         Self {
-            w,
-            h,
             d,
             ox,
+            h,
             base_y,
             mound_top: f as f32 - 55.0,
         }
