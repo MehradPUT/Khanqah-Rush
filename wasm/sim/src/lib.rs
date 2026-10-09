@@ -875,7 +875,6 @@ mod tests {
         // Two survived shifts plus the lethal shatter shift.
         assert_eq!(sim.shifts, 3);
     }
-}
 
     /// Chop the safe side of whatever sits at the queue bottom.
     fn chop_safe(sim: &mut Sim, t_ms: u32) -> u32 {
