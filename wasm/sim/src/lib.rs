@@ -255,16 +255,17 @@ impl Sim {
     /// Ahmad exhaustion save: shatter, then shift + score when the (new)
     /// bottom still collides. NOTE: the bundle omits the nonzero guard
     /// on the re-check, so a NONE bottom "collides" for RIGHT-side play.
-    fn cleanup_collide(&mut self) {
+    /// Takes the side explicitly: impacts use the stored Va-time side.
+    fn cleanup_collide(&mut self, left: bool) {
         if self.queue_len > 0 {
             let b = self.queue[0];
-            if b != SIDE_NONE && Self::collides(self.player_left, b) && b.abs() == 1 {
+            if b != SIDE_NONE && Self::collides(left, b) && b.abs() == 1 {
                 self.shift_entry();
             }
         }
         if self.queue_len > 0 {
             let b = self.queue[0];
-            if Self::collides(self.player_left, b) {
+            if Self::collides(left, b) {
                 self.shift_entry();
                 self.score_point();
             }
@@ -355,7 +356,8 @@ impl Sim {
                     self.flurry_remaining = FLURRY_COUNT;
                     self.flurry_next_at_ms = t_ms.saturating_add(FLURRY_STEP_MS);
                     self.pin_full(t_ms);
-                    self.player_left = self.ali_safe_side();
+                    // NOTE: the trigger wa() move is voided by the tail
+                    // wa() below; only post-auto moves stick.
                 }
             }
             HERO_AMIRHOSSEIN => {
@@ -377,12 +379,14 @@ impl Sim {
     }
 
     /// Sacrifice impact + Ahmad exhaustion cleanup share the pattern;
-    /// applied once when the clock crosses the impact time.
+    /// applied once when the clock crosses the impact time. The impact
+    /// reads the stored Va-time side, not the live player side.
     fn maybe_impact(&mut self, t_ms: u32) {
         if let Some(at) = self.sacrifice_impact_at_ms {
             if at <= t_ms {
                 self.sacrifice_impact_at_ms = None;
-                self.cleanup_collide();
+                let side = self.sacrifice_impact_left;
+                self.cleanup_collide(side);
             }
         }
     }
@@ -446,7 +450,8 @@ impl Sim {
         if self.hero == HERO_AHMAD && self.shields > 0 {
             self.shields -= 1;
             self.pin_full(t_ms);
-            self.cleanup_collide();
+            let side = self.player_left;
+            self.cleanup_collide(side);
             return false;
         }
         if self.hero == HERO_FARGOL && !self.sacrifice_used {
@@ -522,7 +527,8 @@ impl Sim {
         // first, so saves apply without processing — except the Ahmad
         // shield save, whose cleanup already ran, letting the chop
         // through normally. Anchors use the pre-update deadline as the
-        // Va-time proxy.
+        // Va-time proxy. Player side is still the Va-time value here;
+        // the tail update lands below.
         if (t_ms as f64) > self.deadline_ms {
             let anchor = self.deadline_ms;
             if self.hero == HERO_PARSA && self.sleeps_used < PARSA_NAPS {
@@ -536,7 +542,8 @@ impl Sim {
             } else if self.hero == HERO_AHMAD && self.shields > 0 {
                 self.shields -= 1;
                 self.pin_full(t_ms);
-                self.cleanup_collide();
+                let side = self.player_left;
+                self.cleanup_collide(side);
             } else if self.hero == HERO_FARGOL && !self.sacrifice_used {
                 self.sacrifice_used = true;
                 self.pin_full(t_ms);
@@ -552,6 +559,10 @@ impl Sim {
                 return EV_DIED_EXHAUSTION;
             }
         }
+        // Tail wa() equivalent: every chop processed from here on moves
+        // the player. Captured first for impact sides below.
+        let va_side = self.player_left;
+        self.player_left = left;
         // Ahmad shield intercept: absorb a lethal branch (+1, extra
         // shift). Blocked chops don't advance the earn counter.
         if self.hero == HERO_AHMAD && self.shields > 0 {
@@ -566,7 +577,6 @@ impl Sim {
                 self.pin_full(t_ms);
                 self.score_point();
                 self.shift_entry();
-                self.player_left = left;
                 return EV_ALIVE;
             }
         }
@@ -582,7 +592,6 @@ impl Sim {
                 self.pin_full(t_ms);
                 self.score_point();
                 self.shift_entry();
-                self.player_left = left;
                 return EV_ALIVE;
             }
         }
@@ -599,13 +608,14 @@ impl Sim {
             self.shatter_if_small();
             if self.hero == HERO_FARGOL && !self.sacrifice_used {
                 // Va() sacrifice: survive, cinematic blackout, cleanup at
-                // impact. The trigger chop itself scores nothing.
+                // impact. The trigger chop itself scores nothing; the
+                // impact side is the Va-time player side.
                 self.sacrifice_used = true;
                 self.pin_full(t_ms);
                 self.sacrifice_ignore_until_ms = t_ms.saturating_add(SACRIFICE_MS);
                 self.sacrifice_impact_at_ms =
                     Some(t_ms.saturating_add(SACRIFICE_IMPACT_MS));
-                self.sacrifice_impact_left = self.player_left;
+                self.sacrifice_impact_left = va_side;
                 self.hero_progress(t_ms);
                 return EV_ALIVE;
             }

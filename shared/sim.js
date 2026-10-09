@@ -198,18 +198,19 @@ export class Sim {
 	 * Branch-cleanup pattern (sacrifice impact, Ahmad save): shatter,
 	 * then shift + score when the (new) bottom still collides. The
 	 * bundle omits the nonzero guard on the re-check, so a NONE bottom
-	 * "collides" for RIGHT-side play.
+	 * "collides" for RIGHT-side play. Takes the side explicitly:
+	 * impacts use the stored Va-time side.
 	 */
-	cleanupCollide() {
+	cleanupCollide(left) {
 		if (this.queueLen > 0) {
 			const b = this.queue[0];
-			if (b !== SIDE_NONE && collides(this.playerLeft, b)) {
+			if (b !== SIDE_NONE && collides(left, b)) {
 				this.shatterIfSmall();
 			}
 		}
 		if (this.queueLen > 0) {
 			const b = this.queue[0];
-			if (collides(this.playerLeft, b)) {
+			if (collides(left, b)) {
 				this.shiftEntry();
 				this.scorePoint();
 			}
@@ -300,7 +301,8 @@ export class Sim {
 						this.flurryRemaining = FLURRY_COUNT;
 						this.flurryNextAtMs = satAdd(tMs, FLURRY_STEP_MS);
 						this.pinFull(tMs);
-						this.playerLeft = this.aliSafeSide();
+						// NOTE: the trigger wa() move is voided by the tail
+						// wa() below; only post-auto moves stick.
 					}
 				}
 				break;
@@ -327,7 +329,7 @@ export class Sim {
 	maybeImpact(tMs) {
 		if (this.sacrificeImpactAtMs !== null && this.sacrificeImpactAtMs <= tMs) {
 			this.sacrificeImpactAtMs = null;
-			this.cleanupCollide();
+			this.cleanupCollide(this.sacrificeImpactLeft);
 		}
 	}
 
@@ -407,7 +409,7 @@ export class Sim {
 		if (this.hero === HERO_AHMAD && this.shields > 0) {
 			this.shields -= 1;
 			this.pinFull(tMs);
-			this.cleanupCollide();
+			this.cleanupCollide(this.playerLeft);
 			return false;
 		}
 		if (this.hero === HERO_FARGOL && !this.sacrificeUsed) {
@@ -481,7 +483,7 @@ export class Sim {
 			} else if (this.hero === HERO_AHMAD && this.shields > 0) {
 				this.shields -= 1;
 				this.pinFull(tMs);
-				this.cleanupCollide();
+				this.cleanupCollide(this.playerLeft);
 			} else if (this.hero === HERO_FARGOL && !this.sacrificeUsed) {
 				this.sacrificeUsed = true;
 				this.pinFull(tMs);
@@ -495,6 +497,10 @@ export class Sim {
 				return EV_DIED_EXHAUSTION;
 			}
 		}
+		// Tail wa() equivalent: every chop processed from here on moves
+		// the player. Captured first for impact sides below.
+		const vaSide = this.playerLeft;
+		this.playerLeft = left;
 		// Ahmad shield intercept: absorb a lethal branch (+1, extra
 		// shift). Blocked chops don't advance the earn counter.
 		if (this.hero === HERO_AHMAD && this.shields > 0) {
@@ -505,7 +511,6 @@ export class Sim {
 				this.pinFull(tMs);
 				this.scorePoint();
 				this.shiftEntry();
-				this.playerLeft = left;
 				return EV_ALIVE;
 			}
 		}
@@ -517,7 +522,6 @@ export class Sim {
 				this.pinFull(tMs);
 				this.scorePoint();
 				this.shiftEntry();
-				this.playerLeft = left;
 				return EV_ALIVE;
 			}
 		}
@@ -533,12 +537,13 @@ export class Sim {
 			this.shatterIfSmall();
 			if (this.hero === HERO_FARGOL && !this.sacrificeUsed) {
 				// Va() sacrifice: survive, cinematic blackout, cleanup
-				// at impact. The trigger chop scores nothing.
+				// at impact. The trigger chop scores nothing; the impact
+				// side is the Va-time player side.
 				this.sacrificeUsed = true;
 				this.pinFull(tMs);
 				this.sacrificeIgnoreUntilMs = satAdd(tMs, SACRIFICE_MS);
 				this.sacrificeImpactAtMs = satAdd(tMs, SACRIFICE_IMPACT_MS);
-				this.sacrificeImpactLeft = this.playerLeft;
+				this.sacrificeImpactLeft = vaSide;
 				this.heroProgress(tMs);
 				return EV_ALIVE;
 			}

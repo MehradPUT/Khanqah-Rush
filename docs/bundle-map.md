@@ -109,6 +109,9 @@ Rust sims replicate the exact op order).
   Amirhossein scores +1 and Erfan can score +2 on the killing chop;
   counters advance too. Exhaustion deaths (frame-loop `Va`, no `Ca`)
   score nothing.
+- Every processed chop ends with tail `wa(a)` movement (`m` = chop
+  side); ignored inputs (cinematic, flurry taps, sleep, death) leave
+  it. Impact cleanups read the Va-time side.
 
 ## Stamina and Nima rejuvenation (sim-critical)
 
