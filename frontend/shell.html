@@ -66,7 +66,11 @@ for the companion reporter (wired in a later phase).
             canvas.width !== w || canvas.height !== h) {
           window.__khanqah_w = w; window.__khanqah_h = h;
           canvas.width = w; canvas.height = h;
-          if (window.Module && typeof window.Module._khanqah_resize === 'function') {
+          // The C export only exists once the runtime is up: calling it
+          // earlier aborts startup (emscripten assertion). DOM writes
+          // above are always safe.
+          if (window.__khanqah_ready &&
+              window.Module && typeof window.Module._khanqah_resize === 'function') {
             window.Module._khanqah_resize(w, h);
           }
         }
@@ -89,6 +93,7 @@ for the companion reporter (wired in a later phase).
         else { overlay.classList.add('hidden'); }
       },
       onRuntimeInitialized: function () {
+        window.__khanqah_ready = true;
         if (window.khanqah_booted) window.khanqah_booted();
         if (window.khanqah_fitCanvas) {
           window.khanqah_fitCanvas();
