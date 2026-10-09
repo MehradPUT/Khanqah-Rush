@@ -152,7 +152,13 @@ fn tile_region(
     }
 }
 
-pub fn draw_scene(d: &mut impl RaylibDraw, tex: &Textures, game: &Game, l: &Layout) {
+pub fn draw_scene(
+    d: &mut impl RaylibDraw,
+    tex: &Textures,
+    game: &Game,
+    l: &Layout,
+    waiting: bool,
+) {
     d.clear_background(SKY);
     let cx = l.cx();
     let h = l.h as f32;
@@ -211,46 +217,72 @@ pub fn draw_scene(d: &mut impl RaylibDraw, tex: &Textures, game: &Game, l: &Layo
     blit(d, &tex.stones, cx - 40.0, l.mound_top - 36.0, 75.0, 36.0);
 
     // Lumberjack, bottom-left anchored on the mound, facing outward.
-    // (Nima starts right; Phase 4 heroes follow the same rule.)
-    let right = true;
+    // The side follows every processed chop (bundle tail wa()).
+    let left = game.sim.player_left;
     let body = if game.alive() {
-        if right {
-            &tex.nima_body_flip
-        } else {
+        if left {
             &tex.nima_body
+        } else {
+            &tex.nima_body_flip
         }
-    } else if right {
-        &tex.nima_died_flip
-    } else {
+    } else if left {
         &tex.nima_died
+    } else {
+        &tex.nima_died_flip
     };
-    blit(d, body, cx + 35.0, l.mound_top - 140.0, 68.0, 140.0);
+    let bx = if left { cx - 35.0 - 68.0 } else { cx + 35.0 };
+    blit(d, body, bx, l.mound_top - 140.0, 68.0, 140.0);
 
-    // Score, dark like the legacy HUD.
+    // Score, dark like the legacy HUD, centered below the pill.
     let score = game.score().to_string();
     let tw = tex.font.measure_text(&score, 20.0, 0.0).x;
     d.draw_text_ex(
         &tex.font,
         &score,
-        Vector2::new(cx - tw / 2.0, 50.0),
+        Vector2::new(cx - tw / 2.0, 42.0),
         20.0,
         0.0,
         INK,
     );
 
-    // Stamina pill: dark chip, yellow seconds, green bar.
+    // Stamina pill, centered: dark chip, yellow seconds, green bar.
     let stamina =
         (game.sim.stamina_left_ms() as f64 / game.sim.qa_ms).clamp(0.0, 1.0) as f32;
-    let px = ox + 8.0;
+    let px = cx - 60.0;
     let py = 8.0;
     d.draw_rectangle_rounded(Rectangle::new(px, py, 120.0, 26.0), 0.45, 8, PILL);
     let secs = (game.sim.stamina_left_ms() / 1000).to_string() + "s";
     d.draw_text_ex(&tex.font, &secs, Vector2::new(px + 8.0, py + 4.0), 18.0, 0.0, SUN);
     d.draw_rectangle(
         px as i32 + 8,
-        py as i32 + 30.0 as i32,
+        py as i32 + 30,
         (104.0 * stamina) as i32,
         6,
         LEAF,
+    );
+
+    if waiting {
+        let prompt = "tap or press space";
+        let pw = tex.font.measure_text(prompt, 20.0, 0.0).x;
+        d.draw_text_ex(
+            &tex.font,
+            prompt,
+            Vector2::new(cx - pw / 2.0, h / 2.0),
+            20.0,
+            0.0,
+            INK,
+        );
+    }
+
+    // TEMP-DEBUG (Phase 3): backing-store dimensions on canvas so one
+    // screenshot settles every sizing question. Remove after parity.
+    let dims = format!("{}x{} d{} ox{}", l.w, l.h, l.d, l.ox);
+    d.draw_text_ex(
+        &tex.font,
+        &dims,
+        Vector2::new(6.0, h - 20.0),
+        10.0,
+        0.0,
+        INK,
     );
 }

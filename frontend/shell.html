@@ -51,9 +51,11 @@ for the companion reporter (wired in a later phase).
   </div>
 
   <script type="text/javascript">
-    // Keep the canvas backing store matched to the viewport (CSS pixels).
-    // Calls the game's exported resize hook when present; safe no-op
-    // until the scene port (Phase 3) provides one.
+    // Keep the canvas backing store matched to the viewport: nothing in the
+    // runtime resizes it on window resize / orientation change, so without
+    // this the framebuffer stays at the boot size while CSS stretches it
+    // (every proportion distorts). Sets the attributes directly (always
+    // works) and notifies the game so its layout follows.
     window.khanqah_fitCanvas = function () {
       try {
         const canvas = document.getElementById('canvas');
@@ -63,6 +65,7 @@ for the companion reporter (wired in a later phase).
         if (w !== window.__khanqah_w || h !== window.__khanqah_h ||
             canvas.width !== w || canvas.height !== h) {
           window.__khanqah_w = w; window.__khanqah_h = h;
+          canvas.width = w; canvas.height = h;
           if (window.Module && typeof window.Module._khanqah_resize === 'function') {
             window.Module._khanqah_resize(w, h);
           }

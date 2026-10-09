@@ -1,9 +1,10 @@
 //! Khanqah Rush frontend: Raylib + Rust, compiled to WASM.
 //!
-//! Phase 3 plays one endless Nima run per page load: arrows/AD/HL or
-//! half-screen taps chop, death shows the died sprite, any input starts
-//! a fresh round. Carousel, HUD chrome, audio, and score reporting land
-//! in later phases (see docs/frontend-raylib.md).
+//! Phase 3 plays endless Nima rounds: Space/tap starts (the game never
+//! starts itself), arrows/AD/HL or half-screen taps chop, death shows
+//! the died sprite, any input starts a fresh round. Carousel, HUD
+//! chrome, audio, and score reporting land in later phases (see
+//! docs/frontend-raylib.md).
 
 mod assets;
 mod game;
@@ -44,6 +45,11 @@ fn chop_side(rl: &RaylibHandle) -> Option<bool> {
     None
 }
 
+fn start_pressed(rl: &RaylibHandle) -> bool {
+    use KeyboardKey::*;
+    rl.is_key_pressed(KEY_SPACE) || rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT)
+}
+
 fn main() {
     let (mut rl, thread) = raylib::init()
         .size(800, 600)
@@ -52,34 +58,42 @@ fn main() {
     rl.set_target_fps(60);
 
     let tex = scene::Textures::load(&mut rl, &thread);
-    let mut game = Game::new_round();
+    // Cold boot shows one fixed idle scene (stable seed, no flicker);
+    // the first Space/tap starts live play.
+    let idle = Game::new_round();
+    let mut game: Option<Game> = None;
 
     while !rl.window_should_close() {
-        // Input: chop, or restart after death.
-        if let Some(left) = chop_side(&rl) {
+        // Input: chop, restart after death, or start from boot.
+        let mut restart = false;
+        if let Some(game) = game.as_mut() {
             if game.alive() {
+                if let Some(left) = chop_side(&rl) {
+                    let t_ms = (rl.get_time() * 1000.0) as u32;
+                    game.chop(left, t_ms);
+                }
+                // Idle clock so exhaustion can end the round.
                 let t_ms = (rl.get_time() * 1000.0) as u32;
-                game.chop(left, t_ms);
-            } else {
-                game = Game::new_round();
+                game.sim.advance_idle(t_ms);
+            } else if start_pressed(&rl) || chop_side(&rl).is_some() {
+                restart = true;
             }
+        } else if start_pressed(&rl) {
+            restart = true;
         }
-        // Idle clock so exhaustion can end the round.
-        if game.alive() {
-            let t_ms = (rl.get_time() * 1000.0) as u32;
-            game.sim.advance_idle(t_ms);
+        if restart {
+            game = Some(Game::new_round());
         }
 
+        let sim = game.as_ref().map(|g| &g.sim);
+        let shifts = sim.map(|s| s.shifts).unwrap_or(0);
         let layout = Layout::compute(
             rl.get_screen_width(),
             rl.get_screen_height(),
-            game.sim.shifts,
+            shifts,
         );
         let mut d = rl.begin_drawing(&thread);
-        scene::draw_scene(&mut d, &tex, &game, &layout);
+        let g = game.as_ref().unwrap_or(&idle);
+        scene::draw_scene(&mut d, &tex, g, &layout, game.is_none());
     }
 }
-
-
-
-// touch
