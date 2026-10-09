@@ -1,23 +1,30 @@
 //! Canvas scene: background, tree, lumberjack, score, stamina.
 //!
-//! Layout ports the legacy bundle's `Pa()` numbers 1:1 (see
-//! docs/bundle-map.md + layout.rs). Deliberate simplifications for
-//! Phase 3, all marked: tiling replaced by stretch for gradient art,
-//! branch spacing uniform (no sprite bookkeeping — that bookkeeping
-//! IS the invisible-branches bug), no tweens (end-states only),
-//! single ground strip instead of the conditional second canvas.
+//! Layout ports the legacy bundle's `Pa()` numbers (see docs/bundle-map.md
+//! and layout.rs). Composition rules learned from screenshots:
+//! - light-blue sky base; cloud/tree bands tiled, never stretched;
+//! - the tree container descends with chops (W) while the mound, the
+//!   lumberjack, and the HUD stay fixed; branches vanish behind the
+//!   mound, which is drawn after the tree;
+//! - one canopy chunk per nonzero pair at the trunk edge, mirrored;
+//! - lumberjack bottom-left anchored, facing outward.
+//! Still simplified: no tweens (end-states), no particles, Nima only.
 
 use crate::{assets, game::Game, layout::Layout};
 use khanqah_sim::SIDE_NONE;
 use raylib::prelude::*;
 
-const BG: Color = Color::new(0x0e, 0x12, 0x20, 255);
+const SKY: Color = Color::new(0xc7, 0xf0, 0xf9, 255);
+const INK: Color = Color::new(0x37, 0x47, 0x4f, 255);
+const PILL: Color = Color::new(0x1e, 0x2a, 0x38, 255);
+const SUN: Color = Color::new(0xff, 0xd7, 0x6a, 255);
+const LEAF: Color = Color::new(0x4c, 0xaf, 0x50, 255);
 const WHITE: Color = Color::new(255, 255, 255, 255);
-const BLACK: Color = Color::new(0, 0, 0, 255);
 
 pub struct Textures {
     pub trunk: Texture2D,
-    pub branch: Texture2D,
+    pub branch_left: Texture2D,
+    pub branch_right: Texture2D,
     pub bg_bottom: Texture2D,
     pub bg_clouds: Texture2D,
     pub bg_trees: Texture2D,
@@ -27,10 +34,9 @@ pub struct Textures {
     pub stumb: Texture2D,
     pub stones: Texture2D,
     pub nima_body: Texture2D,
+    pub nima_body_flip: Texture2D,
     pub nima_died: Texture2D,
-    pub timeline: Texture2D,
-    pub timeline_bar: Texture2D,
-    pub timeline_warn: Texture2D,
+    pub nima_died_flip: Texture2D,
     pub font: Font,
 }
 
@@ -38,6 +44,23 @@ impl Textures {
     pub fn load(rl: &mut RaylibHandle, thread: &RaylibThread) -> Self {
         fn tex(rl: &mut RaylibHandle, thread: &RaylibThread, path: String) -> Texture2D {
             rl.load_texture(thread, &path).expect("scene texture")
+        }
+        /// Load twice: native and horizontally mirrored (raylib has no
+        /// reliable runtime mirror for our targets; see flip attempts).
+        fn tex_pair(
+            rl: &mut RaylibHandle,
+            thread: &RaylibThread,
+            path: String,
+        ) -> (Texture2D, Texture2D) {
+            let mut img = Image::load_image(&path).expect("scene image");
+            let normal = rl
+                .load_texture_from_image(thread, &img)
+                .expect("scene texture");
+            img.flip_horizontal();
+            let mirrored = rl
+                .load_texture_from_image(thread, &img)
+                .expect("scene texture");
+            (normal, mirrored)
         }
         let font = rl
             .load_font_ex(
@@ -47,9 +70,22 @@ impl Textures {
                 None,
             )
             .expect("score font");
+        let (branch_right, branch_left) =
+            tex_pair(rl, thread, assets::art("branch.png"));
+        let (nima_body, nima_body_flip) = tex_pair(
+            rl,
+            thread,
+            assets::path("images", "nima_body_old.png"),
+        );
+        let (nima_died, nima_died_flip) = tex_pair(
+            rl,
+            thread,
+            assets::path("images", "nima_died_old.png"),
+        );
         Self {
             trunk: tex(rl, thread, assets::art("trunk.png")),
-            branch: tex(rl, thread, assets::art("branch.png")),
+            branch_left,
+            branch_right,
             bg_bottom: tex(rl, thread, assets::art("bg_bottom.png")),
             bg_clouds: tex(rl, thread, assets::art("bg_clouds.png")),
             bg_trees: tex(rl, thread, assets::art("bg_trees.png")),
@@ -58,11 +94,10 @@ impl Textures {
             ground_right: tex(rl, thread, assets::art("ground_right.png")),
             stumb: tex(rl, thread, assets::art("stumb.png")),
             stones: tex(rl, thread, assets::art("stones.png")),
-            nima_body: tex(rl, thread, assets::path("images", "nima_body_old.png")),
-            nima_died: tex(rl, thread, assets::path("images", "nima_died_old.png")),
-            timeline: tex(rl, thread, assets::art("timeline.png")),
-            timeline_bar: tex(rl, thread, assets::art("timeline_bar.png")),
-            timeline_warn: tex(rl, thread, assets::art("timeline_warn.png")),
+            nima_body,
+            nima_body_flip,
+            nima_died,
+            nima_died_flip,
             font,
         }
     }
@@ -118,25 +153,23 @@ fn tile_region(
 }
 
 pub fn draw_scene(d: &mut impl RaylibDraw, tex: &Textures, game: &Game, l: &Layout) {
-    d.clear_background(BG);
+    d.clear_background(SKY);
     let cx = l.cx();
     let h = l.h as f32;
     let ox = l.ox as f32;
     let dw = l.d as f32;
 
-    // Background layers, tiled like the bundle (never stretched —
-    // stretching the cloud motif is what produced the blobs).
+    // Sky + bands, tiled.
     tile_region(d, &tex.bg_bottom, ox, 0.0, dw, h, 420.0, 180.0);
-    tile_region(d, &tex.bg_clouds, ox, h - 130.0, dw, 90.0, 950.0, 256.0);
-    tile_region(d, &tex.bg_trees, ox, h - 128.0, dw, 128.0, 840.0, 280.0);
+    tile_region(d, &tex.bg_clouds, ox, h - 260.0, dw, 130.0, 950.0, 256.0);
+    tile_region(d, &tex.bg_trees, ox, h - 256.0, dw, 128.0, 840.0, 280.0);
 
-    // Trunk column (100 wide), tiled down to the base.
+    // Trunk column (100 wide), tiled down past the mound line.
     tile_region(d, &tex.trunk, cx - 50.0, 0.0, 100.0, l.base_y, 100.0, 750.0);
 
     // Branches: one canopy chunk per nonzero pair, bottom-up every
-    // 80 px, anchored bottom-left at the trunk edge and mirrored by
-    // side (stub faces the trunk). Source-flip: the canonical
-    // raylib mirror, unlike negative dest widths.
+    // 80 px, bottom-left anchored at the trunk edge, stub inward.
+    // Pairs at/below the mound top stay hidden behind it.
     let segs = game.sim.segments();
     let pairs = segs.len() / 2;
     for k in 0..pairs {
@@ -150,71 +183,74 @@ pub fn draw_scene(d: &mut impl RaylibDraw, tex: &Textures, game: &Game, l: &Layo
             continue;
         };
         let by = l.base_y - 40.0 - k as f32 * 80.0;
-        if by < -100.0 {
-            break;
+        if by < -100.0 || by > l.mound_top {
+            continue;
         }
-        let tw = tex.branch.width as f32;
-        let th = tex.branch.height as f32;
-        if side < 0 {
-            // LEFT chunk: bottom-left corner at trunk edge, mirrored.
-            d.draw_texture_pro(
-                &tex.branch,
-                Rectangle::new(tw, 0.0, -tw, th),
-                Rectangle::new(cx - 135.0, by - 80.0, 125.0, 80.0),
-                Vector2::new(0.0, 0.0),
-                0.0,
-                WHITE,
-            );
+        let chunk = if side < 0 {
+            &tex.branch_left
         } else {
-            d.draw_texture_pro(
-                &tex.branch,
-                Rectangle::new(0.0, 0.0, tw, th),
-                Rectangle::new(cx + 10.0, by - 80.0, 125.0, 80.0),
-                Vector2::new(0.0, 0.0),
-                0.0,
-                WHITE,
-            );
-        }
+            &tex.branch_right
+        };
+        let dx = if side < 0 { cx - 135.0 } else { cx + 10.0 };
+        blit(d, chunk, dx, by - 80.0, 125.0, 80.0);
     }
 
-    // Lumberjack, bottom-left anchored (bundle `sa` anchor): right of
-    // the trunk on the initial side, mirrored to face outward.
+    // Ground mound (drawn after the tree so the base sinks behind it).
+    let mound_h = 110.0;
+    blit(d, &tex.ground_bg, ox, l.mound_top, dw, mound_h);
+    blit(d, &tex.ground_left, ox, l.mound_top, 140.0, 95.0);
+    blit(
+        d,
+        &tex.ground_right,
+        ox + dw - 195.0,
+        l.mound_top,
+        195.0,
+        95.0,
+    );
+    blit(d, &tex.stumb, cx - 110.0, l.mound_top - 60.0, 50.0, 60.0);
+    blit(d, &tex.stones, cx - 40.0, l.mound_top - 36.0, 75.0, 36.0);
+
+    // Lumberjack, bottom-left anchored on the mound, facing outward.
+    // (Nima starts right; Phase 4 heroes follow the same rule.)
+    let right = true;
     let body = if game.alive() {
-        &tex.nima_body
+        if right {
+            &tex.nima_body_flip
+        } else {
+            &tex.nima_body
+        }
+    } else if right {
+        &tex.nima_died_flip
     } else {
         &tex.nima_died
     };
-    let bw = body.width as f32;
-    let bh = body.height as f32;
-    d.draw_texture_pro(
-        body,
-        Rectangle::new(bw, 0.0, -bw, bh),
-        Rectangle::new(cx + 35.0, l.base_y - 140.0, 68.0, 140.0),
-        Vector2::new(0.0, 0.0),
-        0.0,
-        WHITE,
-    );
+    blit(d, body, cx + 35.0, l.mound_top - 140.0, 68.0, 140.0);
 
-    // Score + stamina HUD (bundle Q/n/A geometry).
+    // Score, dark like the legacy HUD.
     let score = game.score().to_string();
     let tw = tex.font.measure_text(&score, 20.0, 0.0).x;
-    d.draw_text_ex(&tex.font, &score, Vector2::new(cx - tw / 2.0, 30.0), 20.0, 0.0, WHITE);
+    d.draw_text_ex(
+        &tex.font,
+        &score,
+        Vector2::new(cx - tw / 2.0, 50.0),
+        20.0,
+        0.0,
+        INK,
+    );
 
-    let stamina = (game.sim.stamina_left_ms() as f64 / game.sim.qa_ms).clamp(0.0, 1.0) as f32;
-    let ax = cx - 44.0;
-    let ay = 15.0;
-    d.draw_rectangle(ax as i32 - 3, ay as i32 - 3, 94, 15, BLACK);
-    blit(d, &tex.timeline_bar, ax, ay + 3.0, 88.0 * stamina, 9.0);
-    if stamina < 0.25 {
-        blit(d, &tex.timeline_warn, ax, ay + 3.0, 88.0 * stamina, 9.0);
-    }
-    blit(d, &tex.timeline, ax - 6.0, ay - 6.0, 100.0, 21.0);
-
-    // Ground strip (bundle 170px ground canvas, always drawn).
-    let gy = h - 95.0;
-    blit(d, &tex.ground_bg, 0.0, gy, l.w as f32, 95.0);
-    blit(d, &tex.ground_left, 0.0, gy, 140.0, 95.0);
-    blit(d, &tex.ground_right, l.w as f32 - 195.0, gy, 195.0, 95.0);
-    blit(d, &tex.stumb, cx - 120.0, h - 60.0, 50.0, 60.0);
-    blit(d, &tex.stones, cx + 60.0, h - 36.0, 75.0, 36.0);
+    // Stamina pill: dark chip, yellow seconds, green bar.
+    let stamina =
+        (game.sim.stamina_left_ms() as f64 / game.sim.qa_ms).clamp(0.0, 1.0) as f32;
+    let px = ox + 8.0;
+    let py = 8.0;
+    d.draw_rectangle_rounded(Rectangle::new(px, py, 120.0, 26.0), 0.45, 8, PILL);
+    let secs = (game.sim.stamina_left_ms() / 1000).to_string() + "s";
+    d.draw_text_ex(&tex.font, &secs, Vector2::new(px + 8.0, py + 4.0), 18.0, 0.0, SUN);
+    d.draw_rectangle(
+        px as i32 + 8,
+        py as i32 + 30.0 as i32,
+        (104.0 * stamina) as i32,
+        6,
+        LEAF,
+    );
 }

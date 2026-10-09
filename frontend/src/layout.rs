@@ -14,18 +14,27 @@ pub struct Layout {
     pub ox: i32,
     /// Tree container base y (bundle `u.y = f-55+W`, W from shifts).
     pub base_y: f32,
+    /// Mound top y (tree base and lumberjack feet rest here).
+    pub mound_top: f32,
 }
 
 impl Layout {
+    /// Footer reserve for the Phase-4 action buttons (tunable knob;
+    /// legacy offsets: 228/188/128/0 by viewport breakpoint).
+    const FOOTER: i32 = 180;
+
     pub fn compute(w: i32, h: i32, shifts: u64) -> Self {
         let d = w.min(800);
         let ox = (w - d) / 2;
+        let f = (h - Self::FOOTER).max(320);
+        let base_y = f as f32 - 55.0 + shifts as f32 * 50.0;
         Self {
             w,
             h,
             d,
             ox,
-            base_y: h as f32 - 55.0 + shifts as f32 * 50.0,
+            base_y,
+            mound_top: f as f32 - 55.0,
         }
     }
 
