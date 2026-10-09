@@ -8,3 +8,4 @@ edition = "2021"
 
 [dependencies]
 raylib = "6.0"
+khanqah-sim = { path = "../wasm/sim" }

@@ -136,8 +136,13 @@ dependencies = [
 name = "khanqah-frontend"
 version = "0.1.0"
 dependencies = [
+ "khanqah-sim",
  "raylib",
 ]
+
+[[package]]
+name = "khanqah-sim"
+version = "0.1.0"
 
 [[package]]
 name = "libc"

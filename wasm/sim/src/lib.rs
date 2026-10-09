@@ -158,6 +158,8 @@ pub struct Sim {
     pub sleeps_used: u32,
     pub nap_start_ms: u32,
     pub suspended: bool,
+    /// Total queue shifts performed (visual scroll bookkeeping).
+    pub shifts: u64,
 }
 
 impl Sim {
@@ -192,6 +194,7 @@ impl Sim {
             sleeps_used: 0,
             nap_start_ms: 0,
             suspended: false,
+            shifts: 0,
         };
         // da=[0,0], then pairs while length < 11.
         sim.push_raw(SIDE_NONE);
@@ -224,6 +227,7 @@ impl Sim {
         let bottom = self.queue[0];
         self.queue.copy_within(1.., 0);
         self.queue_len -= 1;
+        self.shifts += 1;
         bottom
     }
 
@@ -652,6 +656,11 @@ impl Sim {
             return 0;
         }
         (self.deadline_ms - self.last_t_ms as f64).max(0.0) as u32
+    }
+
+    /// Live queue contents (bottom first).
+    pub fn segments(&self) -> Vec<i8> {
+        self.queue[..self.queue_len].to_vec()
     }
 }
 

@@ -140,6 +140,7 @@ export class Sim {
 		this.sleepsUsed = 0;
 		this.napStartMs = 0;
 		this.suspended = false;
+		this.shifts = 0;
 		// da=[0,0], then pairs while length < 11 (settles at 12).
 		this.pushRaw(SIDE_NONE);
 		this.pushRaw(SIDE_NONE);
@@ -174,6 +175,7 @@ export class Sim {
 			this.queue[i] = this.queue[i + 1];
 		}
 		this.queueLen -= 1;
+		this.shifts += 1;
 		return bottom;
 	}
 
