@@ -1,7 +1,6 @@
 // Thin node:http adapter over score-core.js for Khanqah Rush.
-// REFERENCE implementation of docs/DEPLOYMENT.md Part D — same logic drops
-// into a Cloudflare Worker entry later. Runs on plain Node.js, no
-// dependencies (score-core.js itself is dependency-free WebCrypto):
+// Same logic as worker/index.js (the edge entry). Runs on plain Node.js,
+// no dependencies (score-core.js itself is dependency-free WebCrypto):
 //
 //   TELEGRAM_BOT_TOKEN=... GAME_URL=https://... GAME_SHORT_NAME=... \
 //     SERVER_SECRET=... node server/example.cjs
@@ -134,9 +133,14 @@ async function main() {
 				const body = await readJson(req);
 				// Always 200 so probes learn nothing; the recorded flag (also
 				// visible on the public leaderboard anyway) tells the game.
+				// Reject reasons ride along only in dev mode (see
+				// docs/debugging.md).
+				const debug = core.isDebugEnabled(process.env);
 				const deny = (reason) => {
 					console.warn(`[example] score rejected: ${reason}`);
-					return json(res, 200, { ok: true, recorded: false });
+					return debug
+						? json(res, 200, { ok: true, recorded: false, debugReason: reason })
+						: json(res, 200, { ok: true, recorded: false });
 				};
 				// Fail closed: an empty secret would verify everything under
 				// the empty HMAC key.

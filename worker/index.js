@@ -1,9 +1,10 @@
 /**
  * Production Cloudflare Worker entry for Khanqah Rush.
  *
- * Same contract as server/example.cjs (see docs/DEPLOYMENT.md Part D), but
- * running on the edge next to the static game: webhook + score API handled
- * here, everything else falls through to the Workers Static Assets binding.
+ * Same contract as server/example.cjs (thin node:http adapter over the
+ * same core), but running on the edge next to the static game: webhook +
+ * score API handled here, everything else falls through to the Workers
+ * Static Assets binding.
  * Secrets arrive via env (wrangler secret put); sessions validate
  * statelessly from the signed launch token (no shared memory between
  * isolates). The nonce store stays in-memory, so cross-isolate replays
@@ -17,6 +18,7 @@ import {
 	createSessionRegistry,
 	deriveSeed,
 	deriveSessionKey,
+	isDebugEnabled,
 	isSessionLive,
 	issueLaunchToken,
 	replayTrace,
@@ -175,10 +177,16 @@ async function handleSetScore(req, env) {
 	const body = await req.json().catch(() => ({}));
 	// Always 200 so probes learn nothing; the recorded flag (also visible
 	// on the public leaderboard anyway) tells the game what happened.
-	// TEMP-DEBUG: reason exposed until the first verified save; remove after.
+	// Reject reasons ride along only in dev mode (see docs/debugging.md):
+	// they would otherwise oracle the verification for cheaters.
+	const debug = isDebugEnabled(env);
 	const deny = (reason) => {
 		console.warn(`[worker] score rejected: ${reason}`);
-		return json({ ok: true, recorded: false, debugReason: reason });
+		return json(
+			debug
+				? { ok: true, recorded: false, debugReason: reason }
+				: { ok: true, recorded: false },
+		);
 	};
 	// Fail closed: an empty secret would verify everything under the
 	// empty HMAC key.
@@ -255,24 +263,29 @@ export default {
 		}
 		if (req.method === "POST" && url.pathname === "/telegram-webhook") {
 			const update = await req.json().catch(() => ({}));
-			console.log(
-				`[worker] update: ${update.inline_query ? "inline_query" : update.callback_query ? "callback_query" : update.message ? `message:${update.message.text ?? "?"}` : "unknown"}`,
-			);
+			// Per-update traffic log is dev-only noise (see
+			// docs/debugging.md); production stays quiet.
+			if (isDebugEnabled(env)) {
+				console.log(
+					`[worker] update: ${update.inline_query ? "inline_query" : update.callback_query ? "callback_query" : update.message ? `message:${update.message.text ?? "?"}` : "unknown"}`,
+				);
+			}
 			return handleUpdate(update, req, env);
 		}
 		if (req.method === "POST" && url.pathname === "/api/setScore") {
-			// TEMP-DEBUG: surface the crash line until the first verified
-			// save; remove together with debugReason.
+			// Crash detail stays server-side unless dev mode explicitly
+			// asks for it (see docs/debugging.md); the client only learns
+			// that the score was not recorded.
 			try {
 				return await handleSetScore(req, env);
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
 				console.error(`[worker] setScore crashed: ${message}`);
-				return json({
-					ok: true,
-					recorded: false,
-					debugReason: `crash:${message}`,
-				});
+				return json(
+					isDebugEnabled(env)
+						? { ok: true, recorded: false, debugReason: `crash:${message}` }
+						: { ok: true, recorded: false },
+				);
 			}
 		}
 		if (req.method === "POST" && url.pathname === "/api/getHighScores") {

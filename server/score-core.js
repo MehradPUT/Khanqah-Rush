@@ -19,6 +19,14 @@ export const MAX_CPS = 10;
 // any, so an in-memory "current session" check fails across isolates).
 export const SESSION_TTL_SEC = 3600;
 
+// Dev-only score-debug flag (see docs/debugging.md): when the host env
+// carries DEBUG_SCORES=1, deny responses may include `debugReason` and
+// crash detail. Production must never set it — reject reasons are a
+// cheat oracle, so the flag is server-side only (never client-gated).
+export function isDebugEnabled(env) {
+	return env?.DEBUG_SCORES === "1";
+}
+
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 

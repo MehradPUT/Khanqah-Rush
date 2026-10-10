@@ -65,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   launch tokens, session keys, envelope + plausibility checks), reference
   node adapter and production Worker entry (`BOT_USERNAME`/`GAME_SHORT_NAME`
   vars), `npm run deploy`, and bot/webhook Makefile targets.
+- Debug contract (`docs/debugging.md`, `DEBUG_SCORES` flag): the client
+  `?dbg` badge+logs are the permanent dev-mode, while server reject
+  reasons, crash detail, and per-update logs are dev-only via
+  `DEBUG_SCORES=1` (`.env` / `.dev.vars`, never production);
+  `window.__khanqah` stays always-on. Reasons are server-gated because
+  they would otherwise oracle verification for cheaters.
 
 ### Changed
 
@@ -109,3 +115,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it and every score went unrecorded.
 - Wrangler local dev vars (`.dev.vars`) are now gitignored alongside
   `.env`/`*.log`, closing a `git add .` secret-leak path.
+- Score deny responses no longer leak `debugReason` (or crash internals)
+  by default on either transport; developers opt in with `DEBUG_SCORES=1`.

@@ -9,6 +9,7 @@ import {
 	deriveSessionKey,
 	HERO_ALI,
 	HERO_NIMA,
+	isDebugEnabled,
 	isSessionLive,
 	issueLaunchToken,
 	packTrace,
@@ -304,6 +305,15 @@ describe("misc", () => {
 		expect(a.length).toBe(32);
 		expect(hex(a)).toBe(hex(b));
 		expect(hex(a)).not.toBe(hex(c));
+	});
+
+	it("enables score debug output on an exact flag match only", () => {
+		expect(isDebugEnabled({ DEBUG_SCORES: "1" })).toBe(true);
+		expect(isDebugEnabled({})).toBe(false);
+		expect(isDebugEnabled(null)).toBe(false);
+		expect(isDebugEnabled(undefined)).toBe(false);
+		expect(isDebugEnabled({ DEBUG_SCORES: "true" })).toBe(false);
+		expect(isDebugEnabled({ DEBUG_SCORES: "" })).toBe(false);
 	});
 });
 

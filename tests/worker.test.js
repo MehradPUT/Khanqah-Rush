@@ -343,13 +343,29 @@ describe("worker entry", () => {
 				...ENV,
 			});
 			expect(bad.status).toBe(200);
-			// TEMP-DEBUG: debugReason rides along until verified; match loosely.
-			expect(await bad.json()).toMatchObject({ ok: true, recorded: false });
+			// Production contract (docs/debugging.md): deny bodies carry no
+			// reason oracle — exactly {ok, recorded}.
+			const badJson = await bad.json();
+			expect(badJson).toEqual({ ok: true, recorded: false });
+			expect("debugReason" in badJson).toBe(false);
 			expect(
 				telegramMock.mock.calls.filter(([url]) => url.endsWith("/setGameScore"))
 					.length,
 			).toBe(1);
 			expect(telegramMock.mock.calls.length).toBe(callsBefore + 1);
+
+			// Dev contract (docs/debugging.md): DEBUG_SCORES=1 attaches the
+			// reject reason instead.
+			const dbg = await worker.fetch(
+				post("/api/setScore", { ...badBody, lt: "bogus" }),
+				{ ...ENV, DEBUG_SCORES: "1" },
+			);
+			expect(dbg.status).toBe(200);
+			expect(await dbg.json()).toEqual({
+				ok: true,
+				recorded: false,
+				debugReason: "bad-launch",
+			});
 		} finally {
 			vi.unstubAllGlobals();
 		}
