@@ -28,8 +28,8 @@ const POLL_MS = 500;
 const HEX_64 = /^[0-9a-f]{64}$/;
 const HEX_16 = /^[0-9a-f]{16}$/;
 
-// Debug instrumentation is deploy-gated: players get a silent
-// companion (no badge, no console output) while developers append
+// Debug instrumentation is deploy-gated per docs/debugging.md: players get
+// a silent companion (no badge, no console output) while developers append
 // `&dbg=1` to the game URL for the full trace. Never logs secrets
 // (key/token/tag/trace) in either mode.
 const DEBUG = (() => {
@@ -344,7 +344,9 @@ async function reportOnce(launch, score, durationSec, chops, endTimeMs, hero) {
 			httpStatus = res.status;
 			const body = await res.json().catch(() => ({}));
 			recorded = !!body?.recorded;
-			// TEMP-DEBUG: surface the server's reject reason until verified.
+			// The server attaches its reject reason in dev mode only (see
+			// docs/debugging.md); otherwise the badge falls back to the
+			// generic text below.
 			debugReason =
 				typeof body?.debugReason === "string" ? body.debugReason : null;
 		} catch (err) {

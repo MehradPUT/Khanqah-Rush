@@ -17,11 +17,7 @@ score envelopes on game over. Runs only with launch params (`lt`, `sid`,
 - The seeded RNG stream is reset per round by the capture-phase primer
   ahead of the bundle's own handlers.
 
-## Developer visibility (`&dbg=1`)
+## Developer visibility
 
-Players get a silent companion: no badge, no console output. Append
-`&dbg=1` to the game URL for the save badge (`● REC` while recording,
-`✓ score saved` / `✗ <reason>` after) plus `[khanqah-debug]` logs of
-every stage (round transitions, freeze, sign, POST verdict — never
-secrets). `window.__khanqah` always exposes `{hasLaunch, recording,
-lastReport, chops, lastPoll}`.
+See [debugging.md](debugging.md) — the `?dbg` badge/logs contract.
+Players get a silent companion by default.

@@ -1,6 +1,6 @@
 # Formalize long-term debug system
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 75
 - TAGS: docs, server, frontend
 
