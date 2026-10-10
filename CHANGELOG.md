@@ -59,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   syntax checks (`npm run check`).
 
 - Reimplementation on the upstream base (legacy PIXI-bundle game): hygiene,
-  tooling, and Gates per `REIMPLEMENTATION.md` (uncommitted plan).
+  tooling, and verification gates (`npm run check` → test → lint →
+  build, bundle SHA logging, Telegram playtest).
 - Games backend: framework-free score verification (`server/score-core.js`,
   launch tokens, session keys, envelope + plausibility checks), reference
   node adapter and production Worker entry (`BOT_USERNAME`/`GAME_SHORT_NAME`
