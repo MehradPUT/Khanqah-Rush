@@ -72,6 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `window.__khanqah` stays always-on. Reasons are server-gated because
   they would otherwise oracle verification for cheaters.
 
+- Seeded-RNG draw telemetry (dev-only, client-side): `public/js/seeded-rng.js`
+  counts seeded `__rng50()` draws in `window.__rngDraws` (cleared by
+  `__rngReset()`), surfaced via `window.__khanqah` and `?dbg` logs
+  (`docs/debugging.md`); production behavior and the trace wire format
+  are unchanged.
+
 ### Changed
 
 - Server replay runs a pure-JS port of the sim (`shared/sim.js`):

@@ -15,7 +15,29 @@ value (including bare `?dbg`) enables it.
 - `[khanqah-debug]` console logs for round transitions, freeze, sign,
   and POST verdicts. Never logs secrets (key/token/tag/trace).
 - `window.__khanqah` (`{hasLaunch, recording, lastReport, chops,
-  lastPoll}`) is exposed in **both** modes — it carries no secrets.
+  rngDraws, lastPoll}`) is exposed in **both** modes — it carries no
+  secrets. `rngDraws` is the seeded-stream draw count below.
+
+## Seeded-RNG draw telemetry (dev-only, client-side)
+
+The seeded spawn stream (`public/js/seeded-rng.js`) exposes
+`window.__rngDraws`: seeded `window.__rng50()` draws consumed since
+page load or the last `window.__rngReset()`. The companion primer
+resets the stream at every round start, so the count is per-round.
+Unseeded opens fall back to `Math.random()` and never increment it.
+Production behavior is unchanged — the counter is observability only.
+
+- `window.__khanqah.rngDraws` (always-on object, refreshed each poll)
+  and `window.__khanqah.lastPoll.rngDraws` carry the current count.
+- `?dbg` logs (`round start seen`, `round frozen for report`,
+  `game over seen`, `firing report`) include `rngDraws`, so a replay
+  `no-outcome-match` (surfaced on the wire as
+  `replay-no-outcome-match`) can be checked against stream position:
+  5 draws after reset is round init, then one draw per odd-length chop
+  replenish (see `docs/bundle-map.md`).
+- The trace wire format (v2) is unchanged. Sending the count to the
+  server for first-divergence reporting is a follow-up: it must land
+  as an additive, version-tolerant extension with tests.
 
 ## Server dev-mode (`DEBUG_SCORES=1`)
 

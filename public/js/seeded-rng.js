@@ -8,7 +8,7 @@
  * to wasm/sim and shared/prng.js) seeded from the `seed` launch param.
  *
  * - With `?seed=<hex16>`: draws come from the seeded stream. The companion
- *   resets it every round via window.__rngReset().
+ *   resets it every round via window.__rngReset() (clearing window.__rngDraws).
  * - Without it (direct/local opens): legacy Math.random() behavior, game
  *   runs local-only as before.
  */
@@ -54,9 +54,15 @@
 		state = (BigInt(seed.hi) << 32n) | BigInt(seed.lo);
 	}
 
+	// Dev-only draw telemetry (see docs/debugging.md): seeded draws
+	// consumed since load or the last reset. Legacy fallback draws
+	// bypass the stream and are never counted.
+	window.__rngDraws = 0;
+
 	function draw() {
 		var out = splitmixNext(state);
 		state = out.state;
+		window.__rngDraws += 1;
 		return Number((out.value >> 32n) & 0xffffffffn) < 0x80000000;
 	}
 
@@ -68,6 +74,7 @@
 		if (seed) {
 			state = (BigInt(seed.hi) << 32n) | BigInt(seed.lo);
 		}
+		window.__rngDraws = 0;
 	};
 
 	window.__rng50 = () => {

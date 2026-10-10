@@ -68,6 +68,20 @@ function readHero() {
 }
 
 /**
+ * Seeded-stream draw telemetry (see docs/debugging.md): seeded draws
+ * consumed since the last stream reset. Null when the shim is absent
+ * (harness runs); never throws, never touches the game.
+ */
+function readDraws() {
+	try {
+		const n = window.__rngDraws;
+		return typeof n === "number" && Number.isInteger(n) && n >= 0 ? n : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * True while the bundle ignores chop inputs but the round goes on:
  * Ali's auto-flurry, Parsa's nap, Fargol's sacrifice cinematic. Inputs
  * here must not enter the trace, or replay diverges. Each flag is read
@@ -391,6 +405,7 @@ function watch() {
 		recording: false,
 		lastReport: "none",
 		chops: 0,
+		rngDraws: readDraws(),
 		lastPoll: null,
 	};
 	dlog("watch init", { hasLaunch: !!launch, classes: wrapClasses() });
@@ -442,7 +457,11 @@ function watch() {
 					chops = [];
 					hero = readHero();
 					pending = null;
-					dlog("round start seen", { classes: wrapClasses(), hero });
+					dlog("round start seen", {
+						classes: wrapClasses(),
+						hero,
+						rngDraws: readDraws(),
+					});
 				}
 			} else if (gameOver()) {
 				if (roundStart !== null) {
@@ -451,6 +470,7 @@ function watch() {
 						classes: wrapClasses(),
 						chops: chops.length,
 						score: currentScore(),
+						rngDraws: readDraws(),
 					});
 					roundStart = null;
 					chops = [];
@@ -533,6 +553,7 @@ function watch() {
 				gameOver: over,
 				score,
 				chops: chops.length,
+				rngDraws: readDraws(),
 				roundActive: roundStart !== null,
 				hasPending: pending !== null,
 				reported,
@@ -546,6 +567,7 @@ function watch() {
 				attempts = 0;
 				window.__khanqah.recording = true;
 				window.__khanqah.chops = chops.length;
+				window.__khanqah.rngDraws = readDraws();
 				showBadge("● REC", "#b45309", true);
 				return;
 			}
@@ -558,6 +580,7 @@ function watch() {
 					hasPending: pending !== null,
 					reported,
 					classes: wrapClasses(),
+					rngDraws: readDraws(),
 				});
 			}
 			window.__khanqah.recording = false;
@@ -593,6 +616,7 @@ function watch() {
 					endTimeMs,
 					attempt: attempts,
 					hero: src.hero,
+					rngDraws: readDraws(),
 				});
 				void reportOnce(
 					launch,

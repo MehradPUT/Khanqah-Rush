@@ -236,4 +236,26 @@ describe("companion score reporter", () => {
 		await flush();
 		expect(posts.length).toBe(sent);
 	});
+
+	it("surfaces the seeded-stream draw count in dev state", async () => {
+		if (!signerBytes) {
+			return;
+		}
+		setClasses("page_wrap", "ready", "in_game");
+		win.score = 0;
+		win.__rngDraws = 0;
+		tick();
+		expect(win.__khanqah.lastPoll.rngDraws).toBe(0);
+		win.__rngDraws = 12;
+		tick();
+		expect(win.__khanqah.lastPoll.rngDraws).toBe(12);
+		expect(win.__khanqah.rngDraws).toBe(12);
+		win.__rngDraws = undefined;
+		// Scoreless game over posts nothing; without the shim the count
+		// reads null again.
+		setClasses("page_wrap", "ready", "in_greet", "in_result");
+		tick();
+		await flush();
+		expect(win.__khanqah.lastPoll.rngDraws).toBeNull();
+	});
 });
