@@ -98,6 +98,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Seed decoder parity: the page shim hand-rolled hex16 decoder is
+  now locked bit-for-bit to `splitSeedHex()` and the server replay
+  decoder by a differential test (`tests/seed-decoder.test.js`).
+  No behavior change.
+
 - Death-chop scoring: the bundle runs per-hero blocks even after the
   killing chop, so Amirhossein +1 and Erfan clutch +2 land on lethal
   rounds too. Replays match instead of rejecting by one point.

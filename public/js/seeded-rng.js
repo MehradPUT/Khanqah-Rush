@@ -24,6 +24,15 @@
 		return { state: s, value: (z ^ (z >> 31n)) & MASK64 };
 	}
 
+	// NOTE: this decoder intentionally duplicates shared/trace-codec.js
+	// splitSeedHex() and server/score-core.js replayTrace() DataView-LE
+	// decoding. This file must stay a classic non-module script loading
+	// before the bundle with no imports (index.html), so it cannot import
+	// the shared decoder. The float-sum loop is bit-identical to
+	// DataView.getUint32(..., true) for every u32 half (all u32 sums stay
+	// exact in float64, coerced with >>> 0); keep it in lock-step:
+	// tests/seed-decoder.test.js diffs this file (via a vm sandbox)
+	// against both canonical implementations.
 	function readSeed() {
 		try {
 			const m = /[?&]seed=([0-9a-f]{16})/.exec(window.location.search);
