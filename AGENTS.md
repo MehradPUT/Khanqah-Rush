@@ -51,7 +51,7 @@ tigo -c list --tag phase1
   the submodules' docs instead of copying them.
 - Never commit secrets
 - Temp/scratch files go in `tmp/` (gitignored).
-- Always make sure the docs stay up to date with the codebase.
+- Always make sure the docs stay up to date with the codebase. This is very important.
 - The agent may always consult the user for decisions and ask to add more
   suggested changes to make the more improvement; no matter how little the
   improvement might be.
