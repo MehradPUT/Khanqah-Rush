@@ -27,6 +27,7 @@ frontend/target/
 
 # Wrangler local state
 .wrangler/
+.dev.vars
 
 # Test coverage
 coverage/

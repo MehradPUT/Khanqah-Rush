@@ -106,3 +106,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the bundle drops `in_game` and raises `in_result` in one synchronous
   block, so the observer destroyed each trace before the poll could send
   it and every score went unrecorded.
+- Wrangler local dev vars (`.dev.vars`) are now gitignored alongside
+  `.env`/`*.log`, closing a `git add .` secret-leak path.
