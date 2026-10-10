@@ -77,8 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   magnitudes, shift-on-chop with odd-length replenish, stamina deadlines,
   no score on lethal chops; wire v2). Nima's rejuvenation cycle (20 s
   period, stamina pinned full past 15 s) is modeled, including window
-  crossings on clock jumps; other heroes' abilities are still unmodeled
-  and their rounds replay-mismatch by design.
+  crossings on clock jumps; all eight hero abilities are now modeled
+  (see Added) and replays accept their rounds.
 - Trace transport ships raw base64 (no `CompressionStream`): several
   mobile browsers never resolve deflate, which silently killed every
   report before it was built.

@@ -117,6 +117,8 @@ each survived chop adds 250 ms capped at `now + 8500 ms`; passing the
 deadline without chopping ends the round. Nima's cycle runs on a 20 s
 period: while the cycle position sits at >= 15 s, `ba` is pinned to
 `now + qa` (full window) every frame, so a round alive at 15 s carries
-through to ~28.5 s even idle. Other heroes' abilities (fargol flame,
-ali flurry, ahmad shield, parsa sacrifice) interact with the`|x| === 1`
-shatter path and are not yet modeled in the sim.
+through to ~28.5 s even idle. All eight hero abilities (fargol flame,
+ali flurry, ahmad shield, parsa sacrifice/naps, amirhossein 2X, erfan
+clutch, fateme base) are modeled in `shared/sim.js` + `wasm/sim`
+(bit-identical, see `tests/sim-parity.test.js`) and interact with the
+`|x| === 1` shatter path.
