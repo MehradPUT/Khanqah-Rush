@@ -51,6 +51,11 @@ tigo -c list --tag phase1
   the submodules' docs instead of copying them.
 - Never commit secrets
 - Temp/scratch files go in `tmp/` (gitignored).
+- No committed document may reference uncommitted files: never link to,
+  quote, or direct readers to files that are not tracked in git (`tmp/`
+  scratch, gitignored locals, intentionally-uncommitted plans).
+  `.gitignore` itself and changelog entries describing ignore rules
+  are exempt.
 - Always make sure the docs stay up to date with the codebase. This is very important.
 - The agent may always consult the user for decisions and ask to add more
   suggested changes to make the more improvement; no matter how little the
