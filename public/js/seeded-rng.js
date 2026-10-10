@@ -26,22 +26,22 @@
 
 	function readSeed() {
 		try {
-			var m = /[?&]seed=([0-9a-f]{16})/.exec(window.location.search);
+			const m = /[?&]seed=([0-9a-f]{16})/.exec(window.location.search);
 			if (!m) {
 				return null;
 			}
-			var bytes = [];
-			for (var i = 0; i < 8; i++) {
+			const bytes = [];
+			for (let i = 0; i < 8; i++) {
 				bytes.push(parseInt(m[1].substr(i * 2, 2), 16));
 			}
-			var lo = 0;
-			var hi = 0;
-			for (var j = 0; j < 4; j++) {
+			let lo = 0;
+			let hi = 0;
+			for (let j = 0; j < 4; j++) {
 				lo += bytes[j] * 256 ** j;
 				hi += bytes[j + 4] * 256 ** j;
 			}
 			return { lo: lo >>> 0, hi: hi >>> 0 };
-		} catch (e) {
+		} catch {
 			return null;
 		}
 	}

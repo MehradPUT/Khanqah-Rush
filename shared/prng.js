@@ -18,7 +18,10 @@ export function splitmix64Next(state) {
 	let z = (state + INCREMENT) & MASK64;
 	z = ((z ^ (z >> 30n)) * 0xbf58476d1ce4e5b9n) & MASK64;
 	z = ((z ^ (z >> 27n)) * 0x94d049bb133111ebn) & MASK64;
-	return { state: (state + INCREMENT) & MASK64, value: (z ^ (z >> 31n)) & MASK64 };
+	return {
+		state: (state + INCREMENT) & MASK64,
+		value: (z ^ (z >> 31n)) & MASK64,
+	};
 }
 
 export function top32(value) {
@@ -33,7 +36,6 @@ export function coinFlip(rng) {
 }
 
 export function createRng(seedLo, seedHi) {
-	const seed =
-		(BigInt(seedHi >>> 0) << 32n) | BigInt(seedLo >>> 0);
+	const seed = (BigInt(seedHi >>> 0) << 32n) | BigInt(seedLo >>> 0);
 	return { state: seed };
 }
