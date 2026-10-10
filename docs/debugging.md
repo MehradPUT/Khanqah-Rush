@@ -39,6 +39,16 @@ Production behavior is unchanged — the counter is observability only.
   server for first-divergence reporting is a follow-up: it must land
   as an additive, version-tolerant extension with tests.
 
+## Seeded-stream primer (determinism check)
+
+With `?dbg`, the companion logs `round start seen` with the `#page_wrap`
+classes at each round transition. To confirm the seeded spawn stream was
+not reset mid-round: start a seeded round, chop through an input-ignoring
+window (Fargol sacrifice, Parsa nap, Ali flurry), and check the server
+verdict -- a mid-round reset would diverge replay and reject the score.
+The ordering proof (bundle bubble vs companion capture, single `in_game`
+toggle site, idempotent `__rngReset`) is recorded in `docs/bundle-map.md`.
+
 ## Server dev-mode (`DEBUG_SCORES=1`)
 
 `server/score-core.js` exports `isDebugEnabled(env)` (strict `"1"`

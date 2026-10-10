@@ -430,10 +430,20 @@ function watch() {
 	// stalled stage) may try once more; a verdict (saved/rejected) never
 	// reposts. Reset every round.
 	let attempts = 0;
-	// Pre-round stream reset: capture-phase listeners run before the
-	// bundle's own handlers in the same user gesture, so the seeded stream
-	// restarts ahead of the round-init draws. Poll-based reset would come
-	// up to 500 ms too late (after the draws already consumed stream).
+	// Pre-round stream reset: window-capture listeners run before the
+	// bundle handlers in the same user gesture, so the seeded stream
+	// restarts ahead of the round-init draws. Ordering proof (see
+	// docs/bundle-map.md): the bundle attaches via N(), which calls
+	// addEventListener(..., false) -- bubble -- on window, while these
+	// are capture; a window-capture listener is first on the way down
+	// and a window-bubble listener last on the way up. Round init (pb)
+	// is also deferred ~50 ms past the gesture (fb), while a poll-based
+	// reset would come up to 500 ms too late (after the draws consumed stream).
+	// The !inGame() gate is sufficient: the bundle toggles in_game at a
+	// single site only, and no input-ignoring window (Fargol 880 ms
+	// sacrifice, Parsa 3 s nap, Ali 10-chop flurry) clears it, so
+	// mid-round gestures never reset. Resets are idempotent (same seed,
+	// same state), so spare menu gestures (carousel arrows, taps) are harmless.
 	const primeStream = () => {
 		try {
 			if (!inGame() && typeof window.__rngReset === "function") {
@@ -445,6 +455,9 @@ function watch() {
 	};
 	window.addEventListener("keydown", primeStream, true);
 	window.addEventListener("pointerdown", primeStream, true);
+	// touchstart covers engines without PointerEvent, where no pointerdown
+	// precedes the bundle touchstart/click round-start handler.
+	window.addEventListener("touchstart", primeStream, true);
 	// Round transitions via MutationObserver: near-zero delay, so chops
 	// landing between transition and the next poll tick are still caught.
 	// (Sub-frame machine-speed inputs remain a known residual.)

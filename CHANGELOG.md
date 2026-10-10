@@ -102,6 +102,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now locked bit-for-bit to `splitSeedHex()` and the server replay
   decoder by a differential test (`tests/seed-decoder.test.js`).
   No behavior change.
+- Seeded-stream primer hardening: the companion reset now also listens
+  `touchstart` (engines without PointerEvent never fire `pointerdown`
+  ahead of the bundle touchstart/click round-start handler). Verified the
+  existing mechanism is otherwise sound -- bundle handlers are
+  window-bubble while the primer is window-capture on the same target,
+  round init draws run ~50 ms after the gesture, `in_game` toggles at a
+  single site no cinematic clears, and resets are idempotent -- and
+  recorded the proof in `docs/bundle-map.md` with a `?dbg` check in
+  `docs/debugging.md` (vitest: primer gating + shim determinism).
 
 - Death-chop scoring: the bundle runs per-hero blocks even after the
   killing chop, so Amirhossein +1 and Erfan clutch +2 land on lethal

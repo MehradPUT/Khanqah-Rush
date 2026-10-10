@@ -36,6 +36,12 @@ describe("companion score reporter", () => {
 		}
 	}
 
+	function touchstart() {
+		for (const fn of listeners.touchstart ?? []) {
+			fn({});
+		}
+	}
+
 	async function flush(ms = 100) {
 		await new Promise((resolve) => setTimeout(resolve, ms));
 	}
@@ -51,7 +57,7 @@ describe("companion score reporter", () => {
 			return;
 		}
 		setClasses("page_wrap", "loading", "in_result", "in_greet");
-		listeners = { keydown: [], pointerdown: [] };
+		listeners = { keydown: [], pointerdown: [], touchstart: [] };
 		posts = [];
 		win = {
 			location: {
@@ -66,6 +72,9 @@ describe("companion score reporter", () => {
 			},
 			score: 0,
 			addEventListener: (type, fn) => {
+				if (!listeners[type]) {
+					listeners[type] = [];
+				}
 				listeners[type].push(fn);
 			},
 			setTimeout: (fn, ms) => setTimeout(fn, ms),
@@ -257,5 +266,30 @@ describe("companion score reporter", () => {
 		tick();
 		await flush();
 		expect(win.__khanqah.lastPoll.rngDraws).toBeNull();
+	});
+
+	it("primes the seeded stream on menu gestures, never mid-round", async () => {
+		if (!signerBytes) {
+			return;
+		}
+		win.__rngReset = vi.fn();
+		// Menu (no in_game): every gesture type primes, repeatedly (idempotent).
+		setClasses("page_wrap", "loading", "in_greet");
+		keydown("Space");
+		pointerdown(new globalThis.Element());
+		touchstart();
+		expect(win.__rngReset).toHaveBeenCalledTimes(3);
+		// Restart path (in_result without in_game): still primes.
+		setClasses("page_wrap", "ready", "in_greet", "in_result");
+		keydown("Space");
+		expect(win.__rngReset).toHaveBeenCalledTimes(4);
+		// Live round (in_game, which input-ignoring cinematics never clear):
+		// no reset, or replay would desync.
+		setClasses("page_wrap", "ready", "in_game");
+		keydown("ArrowLeft");
+		pointerdown(new globalThis.Element());
+		touchstart();
+		expect(win.__rngReset).toHaveBeenCalledTimes(4);
+		win.__rngReset = undefined;
 	});
 });

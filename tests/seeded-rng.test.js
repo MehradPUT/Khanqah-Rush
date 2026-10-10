@@ -27,6 +27,14 @@ function expectedFlips(n) {
 	return out;
 }
 
+function drawSeq(win, n) {
+	const out = [];
+	for (let i = 0; i < n; i++) {
+		out.push(win.__rng50());
+	}
+	return out;
+}
+
 describe("seeded-rng draw telemetry", () => {
 	it("starts at zero and counts one seeded draw per flip", async () => {
 		const win = await loadShim(`?seed=${SEED_HEX}`);
@@ -63,5 +71,23 @@ describe("seeded-rng draw telemetry", () => {
 		expect(win.__rngDraws).toBe(0);
 		win.__rngReset();
 		expect(win.__rngDraws).toBe(0);
+	});
+});
+
+describe("seeded-rng stream determinism", () => {
+	it("replays the identical stream after repeated resets", async () => {
+		const win = await loadShim(`?seed=${SEED_HEX}`);
+		const first = drawSeq(win, 25);
+		win.__rngReset();
+		expect(drawSeq(win, 25)).toEqual(first);
+		win.__rngReset();
+		win.__rngReset();
+		expect(drawSeq(win, 25)).toEqual(first);
+	});
+
+	it("separates streams across seeds", async () => {
+		const a = await loadShim("?seed=0123456789abcdef");
+		const b = await loadShim("?seed=fedcba9876543210");
+		expect(drawSeq(a, 25)).not.toEqual(drawSeq(b, 25));
 	});
 });

@@ -28,6 +28,36 @@ N(M,"keydown",function(a){a.preventDefault();a=a.which||a.keyCode;aa?(37==a&&(Ka
   Synthetic events are out: the bundle flags `e.isTrusted === false`
   (see honeypot note).
 
+## Seeded-stream primer ordering (companion reset guarantee)
+
+The companion (`client/js/score-report.mjs` `primeStream`) resets the
+seeded spawn stream (`window.__rngReset`) on window `keydown` /
+`pointerdown` / `touchstart` while `!inGame()`. The reset provably lands
+ahead of the round-init draws:
+
+- The bundle attaches its keydown handler via `N(M, "keydown", ...)` where
+  `N()` calls `addEventListener(type, fn, false)` -- bubble -- and `M` is
+  `window` (first IIFE argument). The companion uses capture (`true`) on
+  the same target, so on the starting gesture its primer runs first
+  (window-capture is first down the propagation path, window-bubble last
+  up). `pointerdown` likewise precedes the bundle `touchstart`/`click`
+  round-start handler; `touchstart` covers engines without PointerEvent.
+- Round start is `fb()` -> `setTimeout(pb, 50)`: the seeded draws run in
+  `pb()` ~50 ms after the gesture, long after the synchronous primer.
+- `in_game` toggles at exactly one site (the `ma(T, ...)` triple in `Ia()`),
+  and no input-ignoring window clears it -- Fargol 880 ms sacrifice
+  (`playParsaSacrificeAnimation`), Parsa 3 s nap (`triggerParsaNap`),
+  Ali 10-chop flurry (`triggerAliFlurry`) only set flags that `Ca()`
+  early-returns on while pinning stamina. A mid-round keypress therefore
+  never resets the stream mid-round (no silent desync).
+- Round-start paths and their primers: menu Space (`keydown` 32 -> `fb()`)
+  is primed by the same keydown; Play-button press (`button_left` ->
+  `fb()`, from menu or `in_result`) is primed by the preceding
+  `pointerdown`/`touchstart`. Menu arrows/H/L/A/D only rotate the
+  carousel and never start a round. `__rngReset()` re-derives state from
+  the immutable launch seed, so repeated menu-gesture resets are
+  idempotent and harmless.
+
 ## Score submitter (off ~408077)
 
 `qb()` builds `{data, score, token, cheater, reason, cps, duration,
